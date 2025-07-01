@@ -1,0 +1,41 @@
+[
+  {
+    "title": "The Birth of Venus",
+    "artist": "Sandro Botticelli",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg/1146px-Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg",
+    "year": 1485,
+    "style": "Early Renaissance",
+    "museum": "Uffizi Gallery, Florence",
+    "origin": "Italy",
+    "medium": "Tempera on canvas",
+    "dimensions": "172.5 cm \u00d7 278.9 cm",
+    "wikidata": "https://www.wikidata.org/wiki/Q720196",
+    "fact": "Depicts the goddess Venus emerging from the sea."
+  },
+  {
+    "title": "The Starry Night",
+    "artist": "Vincent van Gogh",
+    "image": "https://upload.wikimedia.org/wikipedia/commons/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg",
+    "year": 1889,
+    "style": "Post-Impressionism",
+    "museum": "Museum of Modern Art, New York",
+    "origin": "Netherlands",
+    "medium": "Oil on canvas",
+    "dimensions": "73.7 cm \u00d7 92.1 cm",
+    "wikidata": "https://www.wikidata.org/wiki/Q45585",
+    "fact": "Painted from Van Gogh\u2019s asylum room in Saint-R\u00e9my-de-Provence."
+  },
+  {
+    "title": "The Persistence of Memory",
+    "artist": "Salvador Dali",
+    "image": "https://upload.wikimedia.org/wikipedia/en/d/dd/The_Persistence_of_Memory.jpg",
+    "year": 1931,
+    "style": "Surrealism",
+    "museum": "Museum of Modern Art, New York",
+    "origin": "Spain",
+    "medium": "Oil on canvas",
+    "dimensions": "24 cm \u00d7 33 cm",
+    "wikidata": "https://www.wikidata.org/wiki/Q197204",
+    "fact": "Famous for its melting clocks and dream-like atmosphere."
+  }
+]
