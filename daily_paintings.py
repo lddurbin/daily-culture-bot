@@ -5,95 +5,391 @@ import tempfile
 from datetime import date
 import datacreator
 import sys
+import argparse
 
-# Check if running in output mode
-OUTPUT_MODE = "--output" in sys.argv or "-o" in sys.argv
-SAVE_IMAGE = "--save-image" in sys.argv or "-i" in sys.argv
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description='Daily Artwork Bot - Fetch and display artwork information')
+    parser.add_argument('--output', '-o', action='store_true', help='Save artwork data to JSON file')
+    parser.add_argument('--save-image', '-i', action='store_true', help='Download and save artwork images')
+    parser.add_argument('--count', '-c', type=int, default=1, help='Number of artworks to fetch (default: 1)')
+    parser.add_argument('--html', action='store_true', help='Generate HTML gallery page')
+    parser.add_argument('--fast', action='store_true', help='Skip Wikidata API and use sample data only (much faster)')
+    return parser.parse_args()
 
-# Initialize the data creator
-creator = datacreator.PaintingDataCreator()
-
-print("🎨 Fetching today's painting...")
-
-# Get a random painting using datacreator
-painting = creator.get_daily_painting()
-
-if painting is None:
-    print("❌ Could not fetch a painting from Wikidata. Trying fallback...")
-    # Fallback to sample paintings if API fails
-    sample_paintings = creator.create_sample_paintings(1)
-    if sample_paintings:
-        painting = sample_paintings[0]
-        print("📋 Using sample painting as fallback")
-    else:
-        raise ValueError("Failed to get any painting data")
-
-print(f"✅ Selected: {painting['title']} by {painting['artist']} ({painting['year']})")
-
-# Define headers to comply with Wikimedia policy
-headers = {
-    "User-Agent": "DailyCanvasBot/1.0 (https://github.com/yourusername/daily-canvas)"
-}
-
-# Download and save image if requested
-image_path = None
-if SAVE_IMAGE:
-    print("📥 Downloading image...")
-    
+def download_image(painting, headers, save_dir="."):
+    """Download image for a painting and return the local path."""
     try:
-        # Get image content with better error handling
         response = requests.get(painting["image"], headers=headers, timeout=30)
         content_type = response.headers.get("Content-Type", "")
         
-        # Check if we got a valid image
         if "image/" not in content_type:
-            print(f"⚠️ Warning: Invalid image content type: {content_type}")
-            print(f"🖼️ Image URL: {painting['image']}")
-            print("📋 Skipping image download, but continuing with artwork data...")
-        else:
-            # Save image to a file
-            file_ext = ".jpg" if "jpeg" in content_type else ".png"
-            safe_title = "".join(c for c in painting['title'] if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            filename = f"{safe_title}_{painting['year']}{file_ext}"
-            image_path = filename
-            
-            with open(image_path, 'wb') as f:
-                f.write(response.content)
-            
-            print(f"🖼️ Image saved as: {image_path}")
+            print(f"⚠️ Warning: Invalid image content type for {painting['title']}: {content_type}")
+            return None
+        
+        # Save image to a file
+        file_ext = ".jpg" if "jpeg" in content_type else ".png"
+        safe_title = "".join(c for c in painting['title'] if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        filename = f"{safe_title}_{painting['year']}{file_ext}"
+        image_path = os.path.join(save_dir, filename)
+        
+        with open(image_path, 'wb') as f:
+            f.write(response.content)
+        
+        return image_path
     except Exception as e:
-        print(f"⚠️ Warning: Could not download image: {e}")
-        print(f"🖼️ Image URL: {painting['image']}")
-        print("📋 Continuing with artwork data...")
+        print(f"⚠️ Warning: Could not download image for {painting['title']}: {e}")
+        return None
 
-# Format the artwork information
-artwork_info = f"""🎨 {painting['title']} by {painting['artist']} ({painting['year']})
-Style: {painting['style']}
-Medium: {painting['medium']}
-Museum: {painting['museum']}
-Origin: {painting['origin']}
-Dimensions: {painting['dimensions']}
-Fun fact: {painting['fact']}
-Image URL: {painting['image']}
-Wikidata: {painting['wikidata']}"""
-
-# Output the artwork information
-if OUTPUT_MODE:
-    # Save to JSON file
-    output_filename = f"artwork_{date.today().strftime('%Y%m%d')}.json"
+def generate_html_gallery(paintings, image_paths, output_filename="artwork_gallery.html"):
+    """Generate an HTML gallery page for the artworks."""
+    
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Artwork Gallery - {date.today().strftime('%B %d, %Y')}</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            background: #0a0a0a;
+            color: #ffffff;
+            min-height: 100vh;
+        }}
+        
+        .container {{
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }}
+        
+        .header {{
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem 0;
+        }}
+        
+        .header h1 {{
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }}
+        
+        .header p {{
+            font-size: 1.2rem;
+            color: #a0a0a0;
+            font-weight: 300;
+        }}
+        
+        .gallery {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+        }}
+        
+        .artwork {{
+            background: #1a1a1a;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid #2a2a2a;
+        }}
+        
+        .artwork:hover {{
+            transform: translateY(-8px);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+            border-color: #667eea;
+        }}
+        
+        .artwork-image {{
+            position: relative;
+            height: 300px;
+            overflow: hidden;
+        }}
+        
+        .artwork-image img {{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }}
+        
+        .artwork:hover .artwork-image img {{
+            transform: scale(1.05);
+        }}
+        
+        .artwork-info {{
+            padding: 1.5rem;
+        }}
+        
+        .artwork-title {{
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+        }}
+        
+        .artwork-artist {{
+            font-size: 1rem;
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }}
+        
+        .artwork-details {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }}
+        
+        .detail-item {{
+            background: #2a2a2a;
+            padding: 0.75rem;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }}
+        
+        .detail-label {{
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.25rem;
+        }}
+        
+        .detail-value {{
+            font-size: 0.9rem;
+            color: #ffffff;
+            font-weight: 400;
+        }}
+        
+        .artwork-links {{
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }}
+        
+        .artwork-links a {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.75rem 1rem;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            flex: 1;
+            text-align: center;
+        }}
+        
+        .artwork-links a:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+        }}
+        
+        .footer {{
+            text-align: center;
+            margin-top: 4rem;
+            padding: 2rem 0;
+            border-top: 1px solid #2a2a2a;
+            color: #a0a0a0;
+        }}
+        
+        @media (max-width: 768px) {{
+            .container {{
+                padding: 1rem;
+            }}
+            
+            .header h1 {{
+                font-size: 2rem;
+            }}
+            
+            .gallery {{
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }}
+            
+            .artwork-details {{
+                grid-template-columns: 1fr;
+            }}
+            
+            .artwork-links {{
+                flex-direction: column;
+            }}
+        }}
+        
+        /* Loading animation */
+        .artwork-image::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, #2a2a2a 25%, #3a3a3a 50%, #2a2a2a 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+            z-index: 1;
+        }}
+        
+        @keyframes loading {{
+            0% {{ background-position: 200% 0; }}
+            100% {{ background-position: -200% 0; }}
+        }}
+        
+        .artwork-image img {{
+            position: relative;
+            z-index: 2;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 Daily Artwork Gallery</h1>
+            <p>{date.today().strftime('%B %d, %Y')} • {len(paintings)} Artwork{'s' if len(paintings) != 1 else ''}</p>
+        </div>
+        
+        <div class="gallery">"""
+    
+    for i, painting in enumerate(paintings):
+        image_path = image_paths[i] if i < len(image_paths) and image_paths[i] else None
+        image_src = f"./{os.path.basename(image_path)}" if image_path else painting['image']
+        
+        html_content += f"""
+            <div class="artwork">
+                <div class="artwork-image">
+                    <img src="{image_src}" alt="{painting['title']}" loading="lazy">
+                </div>
+                <div class="artwork-info">
+                    <h2 class="artwork-title">{painting['title']}</h2>
+                    <p class="artwork-artist">by {painting['artist']} ({painting['year'] or 'Unknown year'})</p>
+                    
+                    <div class="artwork-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Style</div>
+                            <div class="detail-value">{painting['style']}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Medium</div>
+                            <div class="detail-value">{painting['medium']}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Museum</div>
+                            <div class="detail-value">{painting['museum']}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Origin</div>
+                            <div class="detail-value">{painting['origin']}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="artwork-links">
+                        <a href="{painting['image']}" target="_blank">View Original</a>
+                        <a href="{painting['wikidata']}" target="_blank">Wikidata</a>
+                    </div>
+                </div>
+            </div>"""
+    
+    html_content += f"""
+        </div>
+        
+        <div class="footer">
+            <p>Generated by Daily Artwork Bot • {date.today().strftime('%Y-%m-%d')}</p>
+        </div>
+    </div>
+</body>
+</html>"""
+    
     with open(output_filename, 'w', encoding='utf-8') as f:
-        json.dump(painting, f, indent=2, ensure_ascii=False)
-    print(f"📄 Artwork data saved to: {output_filename}")
+        f.write(html_content)
+    
+    return output_filename
 
-print("\n" + "="*60)
-print("ARTWORK INFORMATION")
-print("="*60)
-print(artwork_info)
-print("="*60)
+def main():
+    args = parse_arguments()
+    
+    # Initialize the data creator
+    creator = datacreator.PaintingDataCreator()
+    
+    print(f"🎨 Fetching {args.count} painting{'s' if args.count != 1 else ''}...")
+    
+    # Get multiple paintings
+    if args.fast:
+        print("⚡ Fast mode: Using sample data only...")
+        paintings = creator.create_sample_paintings(args.count)
+    else:
+        paintings = creator.fetch_paintings(count=args.count)
+    
+    if not paintings:
+        print("❌ Could not fetch paintings from Wikidata.")
+        print("💡 Try again later or check your internet connection.")
+        print("💡 You can also use --fast flag to use sample data if needed.")
+        raise ValueError("Failed to fetch paintings from Wikidata API")
+    
+    print(f"✅ Selected {len(paintings)} painting{'s' if len(paintings) != 1 else ''}")
+    
+    # Define headers to comply with Wikimedia policy
+    headers = {
+        "User-Agent": "DailyCanvasBot/1.0 (https://github.com/yourusername/daily-canvas)"
+    }
+    
+    # Download images if requested
+    image_paths = []
+    if args.save_image:
+        print("📥 Downloading images...")
+        for i, painting in enumerate(paintings):
+            print(f"  Downloading image {i+1}/{len(paintings)}: {painting['title']}")
+            image_path = download_image(painting, headers)
+            image_paths.append(image_path)
+    
+    # Save to JSON if requested
+    if args.output:
+        output_filename = f"artwork_{date.today().strftime('%Y%m%d')}.json"
+        with open(output_filename, 'w', encoding='utf-8') as f:
+            json.dump(paintings, f, indent=2, ensure_ascii=False)
+        print(f"📄 Artwork data saved to: {output_filename}")
+    
+    # Generate HTML gallery if requested
+    if args.html:
+        html_filename = generate_html_gallery(paintings, image_paths)
+        print(f"🌐 HTML gallery saved to: {html_filename}")
+    
+    # Display artwork information
+    print("\n" + "="*80)
+    print("ARTWORK INFORMATION")
+    print("="*80)
+    
+    for i, painting in enumerate(paintings):
+        print(f"\n{i+1}. 🎨 {painting['title']} by {painting['artist']} ({painting['year']})")
+        print(f"   Style: {painting['style']} | Medium: {painting['medium']}")
+        print(f"   Museum: {painting['museum']} | Origin: {painting['origin']}")
+        if i < len(image_paths) and image_paths[i]:
+            print(f"   🖼️ Local image: {image_paths[i]}")
+        else:
+            print(f"   🖼️ Image URL: {painting['image']}")
+    
+    print("\n" + "="*80)
+    print("✅ Artwork information retrieved successfully!")
+    
+    if args.html:
+        print(f"\n🌐 Open {html_filename} in your browser to view the gallery!")
 
-if image_path:
-    print(f"🖼️ Local image file: {image_path}")
-else:
-    print(f"🖼️ Image URL: {painting['image']}")
-
-print("✅ Artwork information retrieved successfully!")
+if __name__ == "__main__":
+    main()

@@ -1,15 +1,16 @@
 # Daily Artwork Bot 🎨
 
-A Python application that fetches and displays famous paintings with detailed information from Wikidata and Wikimedia Commons. Perfect for art enthusiasts, researchers, and developers who want to access artwork data programmatically.
+A Python application that fetches and displays famous paintings with detailed information from Wikidata and Wikimedia Commons. Features a modern HTML gallery for browsing multiple artworks with high-quality images.
 
 ## 🌟 Features
 
-- **🔍 Live Data Fetching**: Pulls fresh painting data from Wikidata using SPARQL queries
-- **⚖️ License Safe**: Only uses public domain artworks and Creative Commons licensed images
-- **🎲 Random Selection**: Different painting every time - never repeats content
-- **🛡️ Robust Fallback**: Works even when APIs are down using sample data
-- **💾 Local Storage**: Save artwork data and images to local files
-- **📦 Self-Contained**: No manual data curation or JSON file maintenance needed
+- **🔍 Live Data Fetching**: Pulls fresh painting data from Wikidata using optimized SPARQL queries
+- **🎨 Modern HTML Gallery**: Beautiful, responsive gallery with dark theme and smooth animations
+- **📱 Multiple Artworks**: Fetch 1-10+ artworks in a single command
+- **💾 Local Storage**: Save artwork data and high-quality images locally
+- **⚡ Fast Performance**: Optimized queries and smart caching for quick results
+- **🎲 Random Selection**: Different artworks every time with true randomization
+- **📊 Rich Metadata**: Style, medium, museum, origin, and more for each artwork
 
 ## 🏗️ Architecture
 
@@ -21,10 +22,11 @@ A Python application that fetches and displays famous paintings with detailed in
 
 ### How It Works
 
-1. **Data Discovery**: `datacreator.py` queries Wikidata for paintings with images and labels
-2. **Random Selection**: Uses random offset + client-side selection to ensure different paintings each time
-3. **Image Download**: Optionally fetches high-resolution images from Wikimedia Commons
-4. **Data Output**: Displays artwork information and optionally saves data and images locally
+1. **Data Discovery**: `datacreator.py` queries Wikidata for paintings with images using optimized SPARQL
+2. **Random Selection**: Uses random offset to ensure different artworks each time
+3. **Image Processing**: Downloads high-resolution images from Wikimedia Commons
+4. **Gallery Generation**: Creates modern HTML gallery with responsive design
+5. **Data Export**: Saves artwork metadata to JSON and images locally
 
 ## 🚀 Setup
 
@@ -59,6 +61,10 @@ If you have `requests` installed globally, you can run directly:
 ```bash
 python3 daily_paintings.py --output --save-image
 ```
+
+> **Note**: If you get `ModuleNotFoundError: No module named 'requests'`, you need to either:
+> - Install requests globally: `pip3 install requests`
+> - Or use the virtual environment: `source venv/bin/activate && python daily_paintings.py --output --save-image`
 
 ### 💡 Simplified Usage Tips
 
@@ -114,6 +120,37 @@ python daily_paintings.py --save-image
 python daily_paintings.py --output --save-image
 ```
 
+### Multiple Artworks with HTML Gallery
+```bash
+python daily_paintings.py --count 5 --output --save-image --html
+```
+
+### Fast Mode (Sample Data Only)
+```bash
+python daily_paintings.py --count 3 --fast --html
+```
+
+### All Options
+```bash
+python daily_paintings.py --help
+```
+
+**Available Options:**
+- `--count, -c COUNT` - Number of artworks to fetch (default: 1)
+- `--output, -o` - Save artwork data to JSON file
+- `--save-image, -i` - Download and save artwork images
+- `--html` - Generate modern HTML gallery page
+- `--fast` - Skip API calls and use sample data (much faster)
+
+## ⚠️ Error Handling
+
+**API Failures**: If the Wikidata API is unavailable or times out, the script will fail with a clear error message. This ensures you know when real data isn't available.
+
+**Fallback Options**:
+- Use `--fast` flag to skip API calls and use sample data
+- Check your internet connection and try again later
+- The script will not automatically fall back to sample data
+
 > **Note**: After activating the virtual environment, you can use `python` instead of `python3`. If you prefer not to use a virtual environment, use `python3` directly, but you'll need to install dependencies globally with `pip3 install -r requirements.txt`.
 
 
@@ -156,23 +193,49 @@ The bot uses a simple, reliable approach:
 
 ## 📊 Sample Output
 
+### Console Output
 ```
-============================================================
+🎨 Fetching 3 paintings...
+✅ Selected 3 paintings
+📥 Downloading images...
+📄 Artwork data saved to: artwork_20251026.json
+🌐 HTML gallery saved to: artwork_gallery.html
+
+================================================================================
 ARTWORK INFORMATION
-============================================================
-🎨 Joseph the Carpenter by Georges de La Tour (None)
-Style: Classical
-Medium: Oil on canvas
-Museum: Unknown Location
-Origin: Unknown
-Dimensions: Unknown dimensions
-Fun fact: A classical painting by Georges de La Tour.
-Image URL: https://upload.wikimedia.org/wikipedia/commons/thumb/S/Sa/Saint%20Joseph%20Charpentier.jpg/800px-Saint%20Joseph%20Charpentier.jpg
-Wikidata: http://www.wikidata.org/entity/Q743643
-============================================================
-🖼️ Image URL: https://upload.wikimedia.org/wikipedia/commons/thumb/S/Sa/Saint%20Joseph%20Charpentier.jpg/800px-Saint%20Joseph%20Charpentier.jpg
+================================================================================
+
+1. 🎨 Goethe in the Roman Campagna by Johann Heinrich Wilhelm Tischbein (None)
+   Style: Classical | Medium: Oil on canvas
+   Museum: Unknown Location | Origin: Unknown
+   🖼️ Local image: ./Goethe in the Roman Campagna_None.png
+
+2. 🎨 In the Conservatory by Édouard Manet (None)
+   Style: Classical | Medium: Oil on canvas
+   Museum: Unknown Location | Origin: Unknown
+   🖼️ Local image: ./In the Conservatory_None.jpg
+
+3. 🎨 Adoration of the Magi by Sandro Botticelli (None)
+   Style: Classical | Medium: Oil on canvas
+   Museum: Unknown Location | Origin: Unknown
+   🖼️ Local image: ./Adoration of the Magi_None.jpg
+
+================================================================================
 ✅ Artwork information retrieved successfully!
+🌐 Open artwork_gallery.html in your browser to view the gallery!
 ```
+
+### Generated Files
+- **`artwork_gallery.html`** - Modern, responsive gallery with dark theme
+- **`artwork_YYYYMMDD.json`** - Complete artwork metadata
+- **Individual image files** - High-quality artwork images
+
+### HTML Gallery Features
+- **🎨 Modern Design**: Dark theme with gradient accents and smooth animations
+- **📱 Responsive Layout**: Works perfectly on desktop, tablet, and mobile
+- **🖼️ High-Quality Images**: Full-resolution artwork images with hover effects
+- **⚡ Fast Loading**: Optimized CSS and lazy image loading
+- **🎯 Clean Interface**: Professional gallery layout with card-based design
 
 ## 🤖 Automation
 

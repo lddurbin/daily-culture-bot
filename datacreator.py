@@ -95,11 +95,9 @@ class PaintingDataCreator:
             """
             
         else:  # filter_type == "both"
-            # Simplified combined filter - focus on age-based safety first
+            # Minimal filter - just paintings with images
             filter_clause = """
-            # Artist death date filter for public domain (died before 1953 for 70+ year rule)
-            ?artist wdt:P570 ?deathDate .
-            FILTER(YEAR(?deathDate) < 1953)
+            # Just ensure we have paintings with images
             """
 
         # Choose ordering - random or by year
@@ -109,7 +107,7 @@ class PaintingDataCreator:
             order_clause = "ORDER BY DESC(?year)"
 
         sparql_query = f"""
-        SELECT DISTINCT ?painting ?image WHERE {{
+        SELECT ?painting ?image WHERE {{
           ?painting wdt:P31 wd:Q3305213 .  # Instance of painting
           ?painting wdt:P18 ?image .        # Image
           
@@ -124,7 +122,7 @@ class PaintingDataCreator:
             response = self.session.get(
                 self.wikidata_endpoint,
                 params={'query': sparql_query, 'format': 'json'},
-                timeout=60
+                timeout=30  # Reduced from 60 to 30 seconds for faster fallback
             )
             response.raise_for_status()
             
@@ -307,10 +305,7 @@ class PaintingDataCreator:
                 medium = "Oil on canvas"
                 dimensions = "Unknown dimensions"
                 
-                # Get or generate a fact
-                fact = self.get_wikipedia_summary(title)
-                if not fact:
-                    fact = f"A classical painting by {artist}."
+                # Skip fun facts - not needed
                 
                 # Create the painting entry
                 painting_entry = {
@@ -324,7 +319,6 @@ class PaintingDataCreator:
                     "medium": self.clean_text(medium),
                     "dimensions": self.clean_text(dimensions),
                     "wikidata": wikidata_url,
-                    "fact": self.clean_text(fact),
                     "date": datetime.now().strftime("%Y-%m-%d")
                 }
                 
@@ -356,7 +350,6 @@ class PaintingDataCreator:
                 "medium": "Polychrome woodblock print",
                 "dimensions": "25.7 cm × 37.9 cm",
                 "wikidata": "https://www.wikidata.org/wiki/Q455354",
-                "fact": "One of the most recognizable works of Japanese art in the world.",
                 "date": datetime.now().strftime("%Y-%m-%d")
             },
             {
@@ -370,7 +363,6 @@ class PaintingDataCreator:
                 "medium": "Oil and gold leaf on canvas",
                 "dimensions": "180 cm × 180 cm",
                 "wikidata": "https://www.wikidata.org/wiki/Q203533",
-                "fact": "Created during Klimt's 'Golden Period' when he used gold leaf extensively.",
                 "date": datetime.now().strftime("%Y-%m-%d")
             },
             {
@@ -384,7 +376,6 @@ class PaintingDataCreator:
                 "medium": "Oil on canvas",
                 "dimensions": "207.5 cm × 308.1 cm",
                 "wikidata": "https://www.wikidata.org/wiki/Q214316",
-                "fact": "Painted using pointillism technique with tiny dots of color.",
                 "date": datetime.now().strftime("%Y-%m-%d")
             },
             {
@@ -398,7 +389,6 @@ class PaintingDataCreator:
                 "medium": "Oil on canvas",
                 "dimensions": "318 cm × 276 cm",
                 "wikidata": "https://www.wikidata.org/wiki/Q125110",
-                "fact": "Shows Velázquez himself painting a portrait of the Spanish royal family.",
                 "date": datetime.now().strftime("%Y-%m-%d")
             },
             {
@@ -412,7 +402,6 @@ class PaintingDataCreator:
                 "medium": "Oil on canvas",
                 "dimensions": "200 cm × 425 cm",
                 "wikidata": "https://www.wikidata.org/wiki/Q3012020",
-                "fact": "Part of a series of approximately 250 oil paintings by Monet.",
                 "date": datetime.now().strftime("%Y-%m-%d")
             }
         ]
@@ -446,7 +435,7 @@ class PaintingDataCreator:
             random_offset = 0
         
         offset = random_offset
-        max_retries = 3
+        max_retries = 2  # Reduced from 3 to 2 for faster fallback
         
         for retry in range(max_retries):
             try:
@@ -469,8 +458,8 @@ class PaintingDataCreator:
                     
                     offset += batch_size
                     
-                    # Add longer delay between batches to respect rate limits
-                    time.sleep(5)
+                    # Reduced delay between batches for faster execution
+                    time.sleep(2)
                     
                     # Break if we've fetched enough
                     if len(processed_batch) < batch_size // 2:  # Less data means we're near the end
@@ -483,15 +472,14 @@ class PaintingDataCreator:
             except Exception as e:
                 print(f"Attempt {retry + 1} failed: {e}")
                 if retry < max_retries - 1:
-                    # Exponential backoff: 2, 4, 8 seconds
-                    wait_time = 2 ** (retry + 1)
+                    # Faster backoff: 1, 2 seconds
+                    wait_time = retry + 1
                     print(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
         
-        # Fallback to sample data if no paintings were fetched and user allows it
-        if not all_paintings and use_sample_on_error:
-            print("Could not fetch from Wikidata. Using sample paintings...")
-            all_paintings = self.create_sample_paintings(count)
+        # Return empty list if no paintings were fetched (no automatic fallback)
+        if not all_paintings:
+            print("Could not fetch from Wikidata. No paintings retrieved.")
         
         # Return only the requested count
         return all_paintings[:count]
@@ -556,18 +544,13 @@ class PaintingDataCreator:
                         "medium": "Oil on canvas",
                         "dimensions": "Unknown dimensions",
                         "wikidata": wikidata_url,
-                        "fact": f"A classical painting by {artist}.",
                         "date": datetime.now().strftime("%Y-%m-%d")
                     }
                     
                     return painting_entry
         except Exception as e:
-            pass  # Silently fail and use fallback
-        
-        # Fallback to sample data if all else fails
-        print("Using sample paintings as fallback...")
-        sample_paintings = self.create_sample_paintings(1)
-        return sample_paintings[0] if sample_paintings else None
+            print(f"Error fetching daily painting: {e}")
+            return None
 
     def save_to_json(self, paintings: List[Dict], filename: str = "new_paintings.json"):
         """
@@ -657,7 +640,6 @@ def main():
             print(f"\n{i+1}. {painting['title']} by {painting['artist']} ({painting['year']})")
             print(f"   Style: {painting['style']}")
             print(f"   Museum: {painting['museum']}")
-            print(f"   Fact: {painting['fact'][:100]}...")
     
     else:
         print("No paintings were fetched. Please check your internet connection and try again.")
