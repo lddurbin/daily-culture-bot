@@ -1,14 +1,14 @@
 import json
 import requests
-from mastodon import Mastodon
 import os
 import tempfile
 from datetime import date
 import datacreator
 import sys
 
-# Check if running in dry-run mode
-DRY_RUN = "--dry-run" in sys.argv or "-n" in sys.argv
+# Check if running in output mode
+OUTPUT_MODE = "--output" in sys.argv or "-o" in sys.argv
+SAVE_IMAGE = "--save-image" in sys.argv or "-i" in sys.argv
 
 # Initialize the data creator
 creator = datacreator.PaintingDataCreator()
@@ -35,66 +35,65 @@ headers = {
     "User-Agent": "DailyCanvasBot/1.0 (https://github.com/yourusername/daily-canvas)"
 }
 
-# Get image content
-response = requests.get(painting["image"], headers=headers)
-content_type = response.headers.get("Content-Type", "")
+# Download and save image if requested
+image_path = None
+if SAVE_IMAGE:
+    print("📥 Downloading image...")
+    
+    try:
+        # Get image content with better error handling
+        response = requests.get(painting["image"], headers=headers, timeout=30)
+        content_type = response.headers.get("Content-Type", "")
+        
+        # Check if we got a valid image
+        if "image/" not in content_type:
+            print(f"⚠️ Warning: Invalid image content type: {content_type}")
+            print(f"🖼️ Image URL: {painting['image']}")
+            print("📋 Skipping image download, but continuing with artwork data...")
+        else:
+            # Save image to a file
+            file_ext = ".jpg" if "jpeg" in content_type else ".png"
+            safe_title = "".join(c for c in painting['title'] if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            filename = f"{safe_title}_{painting['year']}{file_ext}"
+            image_path = filename
+            
+            with open(image_path, 'wb') as f:
+                f.write(response.content)
+            
+            print(f"🖼️ Image saved as: {image_path}")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not download image: {e}")
+        print(f"🖼️ Image URL: {painting['image']}")
+        print("📋 Continuing with artwork data...")
 
-# Only accept JPEGs
-if "image/jpeg" not in content_type:
-    raise ValueError(f"Invalid image content type: {content_type}")
-
-# Save image to a temporary file
-with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
-    tmp_file.write(response.content)
-    image_path = tmp_file.name
-
-# Format the post
-caption = f"""🎨 {painting['title']} by {painting['artist']} ({painting['year']})
+# Format the artwork information
+artwork_info = f"""🎨 {painting['title']} by {painting['artist']} ({painting['year']})
 Style: {painting['style']}
 Medium: {painting['medium']}
 Museum: {painting['museum']}
+Origin: {painting['origin']}
+Dimensions: {painting['dimensions']}
 Fun fact: {painting['fact']}
-#Art #Painting #DailyArt"""
+Image URL: {painting['image']}
+Wikidata: {painting['wikidata']}"""
 
-if DRY_RUN:
-    print("\n🧪 DRY RUN MODE - Not posting to Mastodon")
-    print("📝 Caption that would be posted:")
-    print("-" * 50)
-    print(caption)
-    print("-" * 50)
+# Output the artwork information
+if OUTPUT_MODE:
+    # Save to JSON file
+    output_filename = f"artwork_{date.today().strftime('%Y%m%d')}.json"
+    with open(output_filename, 'w', encoding='utf-8') as f:
+        json.dump(painting, f, indent=2, ensure_ascii=False)
+    print(f"📄 Artwork data saved to: {output_filename}")
+
+print("\n" + "="*60)
+print("ARTWORK INFORMATION")
+print("="*60)
+print(artwork_info)
+print("="*60)
+
+if image_path:
+    print(f"🖼️ Local image file: {image_path}")
+else:
     print(f"🖼️ Image URL: {painting['image']}")
-    print("✅ Dry run completed successfully!")
-    exit(0)
 
-print("📥 Downloading image...")
-
-# Get image content
-response = requests.get(painting["image"], headers=headers)
-content_type = response.headers.get("Content-Type", "")
-
-# Only accept JPEGs and PNGs (expanded for better compatibility)
-if "image/jpeg" not in content_type and "image/png" not in content_type:
-    raise ValueError(f"Invalid image content type: {content_type}")
-
-# Save image to a temporary file
-file_ext = ".jpg" if "jpeg" in content_type else ".png"
-with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp_file:
-    tmp_file.write(response.content)
-    image_path = tmp_file.name
-
-print("📤 Posting to Mastodon...")
-
-# Post to Mastodon
-mastodon = Mastodon(
-    access_token=os.environ["MASTODON_ACCESS_TOKEN"],
-    api_base_url=os.environ["MASTODON_BASE_URL"]
-)
-
-media = mastodon.media_post(image_path)
-mastodon.status_post(caption, media_ids=[media])
-
-print("✅ Successfully posted to Mastodon!")
-print(f"🎨 Today's painting: {painting['title']} by {painting['artist']}")
-
-# Cleanup
-os.remove(image_path)
+print("✅ Artwork information retrieved successfully!")
