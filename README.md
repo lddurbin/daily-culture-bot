@@ -276,10 +276,34 @@ jobs:
 ## 🛠️ Development
 
 ### Testing
+
+#### Unit Tests with pytest
 ```bash
 # Activate virtual environment first
 source venv/bin/activate
 
+# Install test dependencies
+pip install -r requirements.txt
+
+# Run all tests
+pytest
+
+# Run tests with coverage report
+pytest --cov=. --cov-report=html
+
+# Run specific test file
+pytest test_daily_paintings.py
+pytest test_datacreator.py
+
+# Run with verbose output
+pytest -v
+
+# Run tests in parallel (faster)
+pytest -n auto
+```
+
+#### Manual Testing
+```bash
 # Test basic functionality
 python daily_paintings.py
 
@@ -300,6 +324,18 @@ painting = creator.get_daily_painting()
 print(f'Test painting: {painting[\"title\"] if painting else \"None\"}')
 "
 ```
+
+#### Test Coverage
+The test suite includes:
+- ✅ Command-line argument parsing
+- ✅ Image download functionality
+- ✅ HTML gallery generation
+- ✅ Sample data creation
+- ✅ JSON file operations
+- ✅ Data processing and cleaning
+- ✅ API integration (with mocking)
+- ✅ Error handling
+- ✅ Edge cases
 
 ### Adding New Features
 The modular architecture makes it easy to extend:
