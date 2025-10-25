@@ -54,6 +54,41 @@ A Python application that fetches and displays famous paintings with detailed in
 
 ## 🎯 Usage
 
+### 🚀 Quick Start (Simplest)
+If you have `requests` installed globally, you can run directly:
+```bash
+python3 daily_paintings.py --output --save-image
+```
+
+### 💡 Simplified Usage Tips
+
+**Single Command for Everything:**
+```bash
+python3 daily_paintings.py --output --save-image
+```
+This one command fetches artwork, saves data to JSON, and downloads the image!
+
+**Create a Shell Script (Even Simpler):**
+```bash
+# Create get-artwork.sh
+echo '#!/bin/bash
+cd "$(dirname "$0")"
+source venv/bin/activate
+python daily_paintings.py --output --save-image' > get-artwork.sh
+chmod +x get-artwork.sh
+
+# Then just run:
+./get-artwork.sh
+```
+
+**Add to Your Shell Profile:**
+Add this alias to your `~/.zshrc` or `~/.bashrc`:
+```bash
+alias get-artwork="cd /Users/leedurbin/Code/daily-culture-bot && python3 daily_paintings.py --output --save-image"
+```
+Then just type `get-artwork` from anywhere!
+
+### Using Virtual Environment (Recommended)
 **Important**: Always activate your virtual environment first:
 ```bash
 source venv/bin/activate  # On Windows: venv\Scripts\activate
