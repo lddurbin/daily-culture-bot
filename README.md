@@ -41,34 +41,45 @@ A Python application that fetches and displays famous paintings with detailed in
    cd daily-painting-bot
    ```
 
-2. **Install dependencies**
+2. **Set up virtual environment (recommended)**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
 ## 🎯 Usage
 
+**Important**: Always activate your virtual environment first:
+```bash
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
 ### Get Today's Artwork
 ```bash
-python3 daily_paintings.py
+python daily_paintings.py
 ```
 
 ### Save Artwork Data to JSON
 ```bash
-python3 daily_paintings.py --output
+python daily_paintings.py --output
 ```
 
 ### Download and Save Image
 ```bash
-python3 daily_paintings.py --save-image
+python daily_paintings.py --save-image
 ```
 
 ### Both Data and Image
 ```bash
-python3 daily_paintings.py --output --save-image
+python daily_paintings.py --output --save-image
 ```
 
-> **Note**: Use `python3` instead of `python` on macOS and many Linux systems. If you have a virtual environment, you can also use `python` after activating it with `source venv/bin/activate`.
+> **Note**: After activating the virtual environment, you can use `python` instead of `python3`. If you prefer not to use a virtual environment, use `python3` directly, but you'll need to install dependencies globally with `pip3 install -r requirements.txt`.
 
 
 ### Generate Painting Data
@@ -168,20 +179,23 @@ jobs:
 
 ### Testing
 ```bash
+# Activate virtual environment first
+source venv/bin/activate
+
 # Test basic functionality
-python3 daily_paintings.py
+python daily_paintings.py
 
 # Test with data output
-python3 daily_paintings.py --output
+python daily_paintings.py --output
 
 # Test with image download
-python3 daily_paintings.py --save-image
+python daily_paintings.py --save-image
 
 # Test with real API data
-python3 daily_paintings.py
+python daily_paintings.py
 
 # Test data creator
-python3 -c "
+python -c "
 import datacreator
 creator = datacreator.PaintingDataCreator()
 painting = creator.get_daily_painting()
