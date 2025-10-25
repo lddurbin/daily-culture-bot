@@ -50,23 +50,25 @@ A Python application that fetches and displays famous paintings with detailed in
 
 ### Get Today's Artwork
 ```bash
-python daily_paintings.py
+python3 daily_paintings.py
 ```
 
 ### Save Artwork Data to JSON
 ```bash
-python daily_paintings.py --output
+python3 daily_paintings.py --output
 ```
 
 ### Download and Save Image
 ```bash
-python daily_paintings.py --save-image
+python3 daily_paintings.py --save-image
 ```
 
 ### Both Data and Image
 ```bash
-python daily_paintings.py --output --save-image
+python3 daily_paintings.py --output --save-image
 ```
+
+> **Note**: Use `python3` instead of `python` on macOS and many Linux systems. If you have a virtual environment, you can also use `python` after activating it with `source venv/bin/activate`.
 
 
 ### Generate Painting Data
@@ -151,7 +153,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Fetch daily artwork
-        run: python daily_paintings.py --output --save-image
+        run: python3 daily_paintings.py --output --save-image
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -167,19 +169,19 @@ jobs:
 ### Testing
 ```bash
 # Test basic functionality
-python daily_paintings.py
+python3 daily_paintings.py
 
 # Test with data output
-python daily_paintings.py --output
+python3 daily_paintings.py --output
 
 # Test with image download
-python daily_paintings.py --save-image
+python3 daily_paintings.py --save-image
 
 # Test with real API data
-python daily_paintings.py
+python3 daily_paintings.py
 
 # Test data creator
-python -c "
+python3 -c "
 import datacreator
 creator = datacreator.PaintingDataCreator()
 painting = creator.get_daily_painting()
