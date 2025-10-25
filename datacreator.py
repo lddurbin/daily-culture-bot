@@ -165,18 +165,24 @@ class PaintingDataCreator:
         if not commons_url:
             return ""
             
-        # Extract filename from URL
-        filename_match = re.search(r'/([^/]+\.(jpg|jpeg|png|gif))$', commons_url, re.IGNORECASE)
-        if not filename_match:
+        # If it's already a thumbnail URL, try to get the original
+        if "/thumb/" in commons_url:
+            # Extract the original filename from thumbnail URL
+            # Format: /thumb/path/to/file.jpg/800px-filename.jpg
+            original_match = re.search(r'/thumb/([^/]+/[^/]+\.(jpg|jpeg|png|gif))', commons_url)
+            if original_match:
+                original_path = original_match.group(1)
+                return f"https://upload.wikimedia.org/wikipedia/commons/{original_path}"
+            else:
+                # If we can't parse it, return the original URL
+                return commons_url
+        
+        # If it's a direct commons URL, return as-is
+        if "commons.wikimedia.org" in commons_url or "upload.wikimedia.org" in commons_url:
             return commons_url
             
-        filename = filename_match.group(1)
-        
-        # Create a higher resolution URL (800px width)
-        base_url = "https://upload.wikimedia.org/wikipedia/commons/thumb"
-        # Get the first two characters for the directory structure
-        md5_chars = filename[:2]
-        return f"{base_url}/{md5_chars[0]}/{md5_chars}/{filename}/800px-{filename}"
+        # For other URLs, return as-is
+        return commons_url
 
     def get_painting_dimensions(self, wikidata_url: str) -> str:
         """
