@@ -47,6 +47,8 @@ def parse_arguments():
                        help='Maximum fame level (sitelinks) for artwork (default: 20, lower=more obscure)')
     parser.add_argument('--min-match-score', type=float, default=0.4,
                        help='Minimum match quality score 0.0-1.0 (default: 0.4)')
+    parser.add_argument('--query-timeout', type=int, default=60,
+                       help='Wikidata query timeout in seconds (default: 60)')
     
     args = parser.parse_args()
     
@@ -569,7 +571,7 @@ def main():
         print("📝 Complementary mode automatically enabled poem fetching")
     
     # Initialize the data creators
-    creator = datacreator.PaintingDataCreator()
+    creator = datacreator.PaintingDataCreator(query_timeout=args.query_timeout)
     poem_fetcher_instance = poem_fetcher.PoemFetcher()
     poem_analyzer_instance = poem_analyzer.PoemAnalyzer()
     
@@ -670,7 +672,7 @@ def main():
                 match_status = ["sample"] * len(paintings)
             else:
                 # Try to fetch matching artwork with scoring system
-                scored_results = creator.fetch_paintings_by_subject_with_scoring(
+                scored_results = creator.fetch_artwork_by_subject_with_scoring(
                     poem_analysis=poem_analyses[0],
                     q_codes=all_q_codes, 
                     count=args.count,
