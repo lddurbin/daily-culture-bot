@@ -6,9 +6,9 @@ from unittest.mock import Mock, patch, mock_open, MagicMock
 from datetime import datetime
 
 # Add parent directory to path to import modules
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import datacreator
+from src import datacreator
 
 
 class TestPaintingDataCreatorInit:

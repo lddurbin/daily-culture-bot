@@ -3,13 +3,22 @@ import requests
 import os
 import tempfile
 from datetime import date
-import datacreator
-import poem_fetcher
-import poem_analyzer
-import email_sender
 import sys
 import argparse
 import re
+
+# Import from same package - support both relative and absolute imports
+try:
+    from . import datacreator
+    from . import poem_fetcher
+    from . import poem_analyzer
+    from . import email_sender
+except ImportError:
+    # If running as script, use absolute imports
+    import datacreator
+    import poem_fetcher
+    import poem_analyzer
+    import email_sender
 
 # Load environment variables from .env file if it exists
 try:

@@ -18,14 +18,30 @@ A Python application that fetches and displays famous paintings and random publi
 
 ## 🏗️ Architecture
 
+### Project Structure
+
+```
+daily-culture-bot/
+├── src/                    # Source code
+│   ├── daily_paintings.py  # Main script
+│   ├── datacreator.py      # Wikidata queries
+│   ├── poem_fetcher.py     # PoetryDB queries
+│   ├── poem_analyzer.py    # Theme analysis
+│   └── email_sender.py     # Email functionality
+├── tests/                  # Test files
+├── scripts/                # Utility scripts
+├── daily_culture_bot.py    # Entry point script
+└── requirements.txt        # Dependencies
+```
+
 ### Core Components
 
-- **`daily_paintings.py`** - Main script that fetches and displays artwork and poem information
-- **`datacreator.py`** - Data fetcher that queries Wikidata for paintings
-- **`poem_fetcher.py`** - Data fetcher that queries PoetryDB for random poems
-- **`poem_analyzer.py`** - Theme analysis and artwork matching for complementary mode
-- **`email_sender.py`** - Email functionality for sending artwork and poem content
-- **`requirements.txt`** - Python dependencies
+- **`src/daily_paintings.py`** - Main script that fetches and displays artwork and poem information
+- **`src/datacreator.py`** - Data fetcher that queries Wikidata for paintings
+- **`src/poem_fetcher.py`** - Data fetcher that queries PoetryDB for random poems
+- **`src/poem_analyzer.py`** - Theme analysis and artwork matching for complementary mode
+- **`src/email_sender.py`** - Email functionality for sending artwork and poem content
+- **`daily_culture_bot.py`** - Convenient entry point script
 
 ### How It Works
 
@@ -79,18 +95,18 @@ When using the `--complementary` flag, the workflow changes to create meaningful
 ### 🚀 Quick Start (Simplest)
 If you have `requests` installed globally, you can run directly:
 ```bash
-python3 daily_paintings.py --output --save-image
+python3 daily_culture_bot.py --output --save-image
 ```
 
 > **Note**: If you get `ModuleNotFoundError: No module named 'requests'`, you need to either:
 > - Install requests globally: `pip3 install requests`
-> - Or use the virtual environment: `source venv/bin/activate && python daily_paintings.py --output --save-image`
+> - Or use the virtual environment: `source venv/bin/activate && python daily_culture_bot.py --output --save-image`
 
 ### 💡 Simplified Usage Tips
 
 **Single Command for Everything:**
 ```bash
-python3 daily_paintings.py --output --save-image
+python3 daily_culture_bot.py --output --save-image
 ```
 This one command fetches artwork, saves data to JSON, and downloads the image!
 
@@ -100,7 +116,7 @@ This one command fetches artwork, saves data to JSON, and downloads the image!
 echo '#!/bin/bash
 cd "$(dirname "$0")"
 source venv/bin/activate
-python daily_paintings.py --output --save-image' > get-artwork.sh
+python daily_culture_bot.py --output --save-image' > get-artwork.sh
 chmod +x get-artwork.sh
 
 # Then just run:
@@ -110,7 +126,7 @@ chmod +x get-artwork.sh
 **Add to Your Shell Profile:**
 Add this alias to your `~/.zshrc` or `~/.bashrc`:
 ```bash
-alias get-artwork="cd /Users/leedurbin/Code/daily-culture-bot && python3 daily_paintings.py --output --save-image"
+alias get-artwork="cd /Users/leedurbin/Code/daily-culture-bot && python3 daily_culture_bot.py --output --save-image"
 ```
 Then just type `get-artwork` from anywhere!
 
@@ -122,59 +138,59 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 ### Get Today's Artwork
 ```bash
-python daily_paintings.py
+python daily_culture_bot.py
 ```
 
 ### Save Artwork Data to JSON
 ```bash
-python daily_paintings.py --output
+python daily_culture_bot.py --output
 ```
 
 ### Download and Save Image
 ```bash
-python daily_paintings.py --save-image
+python daily_culture_bot.py --save-image
 ```
 
 ### Both Data and Image
 ```bash
-python daily_paintings.py --output --save-image
+python daily_culture_bot.py --output --save-image
 ```
 
 ### Multiple Artworks with HTML Gallery
 ```bash
-python daily_paintings.py --count 5 --output --save-image --html
+python daily_culture_bot.py --count 5 --output --save-image --html
 ```
 
 ### Fetch Artwork and Poems Together
 ```bash
-python daily_paintings.py --poems --poem-count 2 --output --html
+python daily_culture_bot.py --poems --poem-count 2 --output --html
 ```
 
 ### Complementary Mode (Match Artwork to Poems)
 ```bash
 # Basic complementary mode - automatically fetches poems and matches artwork
-python daily_paintings.py --complementary --output --save-image
+python daily_culture_bot.py --complementary --output --save-image
 
 # Multiple poems with matched artwork
-python daily_paintings.py --complementary --poem-count 3 --html
+python daily_culture_bot.py --complementary --poem-count 3 --html
 
 # Fast mode with complementary matching
-python daily_paintings.py --complementary --fast --html
+python daily_culture_bot.py --complementary --fast --html
 ```
 
 ### Poems Only
 ```bash
-python daily_paintings.py --poems-only --poem-count 3 --output
+python daily_culture_bot.py --poems-only --poem-count 3 --output
 ```
 
 ### Fast Mode (Sample Data Only)
 ```bash
-python daily_paintings.py --count 3 --fast --html
+python daily_culture_bot.py --count 3 --fast --html
 ```
 
 ### All Options
 ```bash
-python daily_paintings.py --help
+python daily_culture_bot.py --help
 ```
 
 **Available Options:**
@@ -253,37 +269,37 @@ The Daily Culture Bot can send artwork and poem content via email with beautiful
 **Basic Email Delivery:**
 ```bash
 # Send artwork via email (HTML + text)
-python daily_paintings.py --email user@example.com
+python daily_culture_bot.py --email user@example.com
 
 # Send poems only via email
-python daily_paintings.py --poems-only --email user@example.com
+python daily_culture_bot.py --poems-only --email user@example.com
 
 # Send matched artwork and poems
-python daily_paintings.py --complementary --email user@example.com
+python daily_culture_bot.py --complementary --email user@example.com
 ```
 
 **Email Format Options:**
 ```bash
 # HTML only (with embedded images)
-python daily_paintings.py --email user@example.com --email-format html
+python daily_culture_bot.py --email user@example.com --email-format html
 
 # Plain text only (no images)
-python daily_paintings.py --email user@example.com --email-format text
+python daily_culture_bot.py --email user@example.com --email-format text
 
 # Both HTML and text (default)
-python daily_paintings.py --email user@example.com --email-format both
+python daily_culture_bot.py --email user@example.com --email-format both
 ```
 
 **Advanced Email Examples:**
 ```bash
 # Multiple artworks and poems via email
-python daily_paintings.py --count 3 --poems --poem-count 2 --email user@example.com
+python daily_culture_bot.py --count 3 --poems --poem-count 2 --email user@example.com
 
 # Fast mode with email (uses sample data)
-python daily_paintings.py --fast --email user@example.com
+python daily_culture_bot.py --fast --email user@example.com
 
 # Complementary mode with HTML email
-python daily_paintings.py --complementary --email user@example.com --email-format html
+python daily_culture_bot.py --complementary --email user@example.com --email-format html
 ```
 
 ### Email Features
@@ -321,7 +337,7 @@ python daily_paintings.py --complementary --email user@example.com --email-forma
 **Testing Email Setup:**
 ```bash
 # Test with fast mode (uses sample data)
-python daily_paintings.py --fast --email your-test-email@example.com
+python daily_culture_bot.py --fast --email your-test-email@example.com
 
 # Test with integration tests (requires TEST_EMAIL_INTEGRATION=true)
 TEST_EMAIL_INTEGRATION=true pytest test_email_sender.py::TestEmailIntegration
@@ -455,7 +471,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Fetch daily artwork
-        run: python3 daily_paintings.py --output --save-image
+        run: python3 daily_culture_bot.py --output --save-image
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -498,16 +514,16 @@ pytest -n auto
 #### Manual Testing
 ```bash
 # Test basic functionality
-python daily_paintings.py
+python daily_culture_bot.py
 
 # Test with data output
-python daily_paintings.py --output
+python daily_culture_bot.py --output
 
 # Test with image download
-python daily_paintings.py --save-image
+python daily_culture_bot.py --save-image
 
 # Test with real API data
-python daily_paintings.py
+python daily_culture_bot.py
 
 # Test data creator
 python -c "

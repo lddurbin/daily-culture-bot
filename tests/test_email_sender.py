@@ -17,9 +17,9 @@ from email.mime.image import MIMEImage
 
 # Add parent directory to path to import modules
 import sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import email_sender
+from src import email_sender
 
 
 class TestEmailSender:
