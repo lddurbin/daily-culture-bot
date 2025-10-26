@@ -11,6 +11,14 @@ import sys
 import argparse
 import re
 
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, continue without it
+    pass
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Daily Culture Bot - Fetch and display artwork and poem information')
