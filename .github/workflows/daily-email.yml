@@ -38,7 +38,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           # Send complementary artwork and poem via email
-          python daily_culture_bot.py --complementary --email "$EMAIL_RECIPIENT" --email-format html
+          # Using enhanced AI analysis with quality scoring and fame filtering
+          python daily_culture_bot.py \
+            --complementary \
+            --email "$EMAIL_RECIPIENT" \
+            --email-format html \
+            --max-fame-level 20 \
+            --min-match-score 0.4
           
       - name: Upload artifacts (optional)
         if: always()
