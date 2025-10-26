@@ -130,6 +130,73 @@ class TestPoemFetcher:
         assert poem["date"] == "2024-01-01"
         assert poem["source"] == "Test"
         assert poem["word_count"] == 2  # Added by filter method
+    
+    def test_fetch_poems_with_word_limit_zero_count(self):
+        """Test fetch_poems_with_word_limit with zero count"""
+        poems = self.fetcher.fetch_poems_with_word_limit(0, max_words=200)
+        assert poems == []
+    
+    def test_fetch_poems_with_word_limit_negative_count(self):
+        """Test fetch_poems_with_word_limit with negative count"""
+        poems = self.fetcher.fetch_poems_with_word_limit(-1, max_words=200)
+        assert poems == []
+    
+    def test_fetch_poems_with_word_limit_success(self):
+        """Test successful fetch with word limit (using sample data)"""
+        # Mock the fetch_random_poems method to return sample data
+        original_fetch = self.fetcher.fetch_random_poems
+        self.fetcher.fetch_random_poems = lambda count: self.fetcher.create_sample_poems(count)
+        
+        try:
+            poems = self.fetcher.fetch_poems_with_word_limit(2, max_words=200, max_retries=3)
+            assert len(poems) == 2
+            assert all(poem["word_count"] <= 200 for poem in poems)
+            assert all("word_count" in poem for poem in poems)
+        finally:
+            # Restore original method
+            self.fetcher.fetch_random_poems = original_fetch
+    
+    def test_fetch_poems_with_word_limit_max_retries(self):
+        """Test fetch_poems_with_word_limit with max retries exceeded"""
+        # Mock fetch_random_poems to always return long poems
+        def mock_fetch_long_poems(count):
+            return [{"title": f"Long Poem {i}", "text": " ".join(["word"] * 300)} for i in range(count)]
+        
+        original_fetch = self.fetcher.fetch_random_poems
+        self.fetcher.fetch_random_poems = mock_fetch_long_poems
+        
+        try:
+            poems = self.fetcher.fetch_poems_with_word_limit(2, max_words=200, max_retries=2)
+            assert len(poems) == 0  # Should return empty list when max retries exceeded
+        finally:
+            # Restore original method
+            self.fetcher.fetch_random_poems = original_fetch
+    
+    def test_fetch_poems_with_word_limit_mixed_results(self):
+        """Test fetch_poems_with_word_limit with mixed short and long poems"""
+        # Mock fetch_random_poems to return mixed results
+        def mock_fetch_mixed_poems(count):
+            return [
+                {"title": "Short Poem", "text": "Hello world"},  # 2 words
+                {"title": "Long Poem", "text": " ".join(["word"] * 300)},  # 300 words
+                {"title": "Medium Poem", "text": " ".join(["word"] * 100)}  # 100 words
+            ]
+        
+        original_fetch = self.fetcher.fetch_random_poems
+        self.fetcher.fetch_random_poems = mock_fetch_mixed_poems
+        
+        try:
+            poems = self.fetcher.fetch_poems_with_word_limit(2, max_words=200, max_retries=3)
+            assert len(poems) == 2
+            assert all(poem["word_count"] <= 200 for poem in poems)
+            # Should include the short and medium poems
+            titles = [poem["title"] for poem in poems]
+            assert "Short Poem" in titles
+            assert "Medium Poem" in titles
+            assert "Long Poem" not in titles
+        finally:
+            # Restore original method
+            self.fetcher.fetch_random_poems = original_fetch
 
 
 if __name__ == "__main__":

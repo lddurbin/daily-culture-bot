@@ -169,6 +169,72 @@ class PoemFetcher:
         
         return filtered_poems
     
+    def fetch_poems_with_word_limit(self, count: int, max_words: int = 200, max_retries: int = 50) -> List[Dict]:
+        """
+        Fetch poems ensuring all are under the word limit by retrying as needed.
+        
+        Args:
+            count: Number of poems to fetch
+            max_words: Maximum number of words allowed (default: 200)
+            max_retries: Maximum number of retry attempts (default: 50)
+            
+        Returns:
+            List of poems that meet the word count criteria
+        """
+        if count <= 0:
+            return []
+        
+        valid_poems = []
+        attempts = 0
+        batch_size = min(count * 2, 10)  # Fetch more than needed to increase chances
+        
+        print(f"📝 Fetching poems with word limit of {max_words} words...")
+        
+        while len(valid_poems) < count and attempts < max_retries:
+            attempts += 1
+            
+            # Fetch a batch of poems
+            try:
+                if attempts == 1:
+                    # First attempt: try to fetch exactly what we need
+                    batch_poems = self.fetch_random_poems(count)
+                else:
+                    # Subsequent attempts: fetch more to increase chances
+                    batch_poems = self.fetch_random_poems(batch_size)
+                
+                if not batch_poems:
+                    print(f"⚠️ No poems returned from API (attempt {attempts})")
+                    continue
+                
+                # Filter poems by word count
+                for poem in batch_poems:
+                    if len(valid_poems) >= count:
+                        break
+                        
+                    word_count = self.count_words(poem)
+                    if word_count <= max_words:
+                        poem['word_count'] = word_count
+                        valid_poems.append(poem)
+                        print(f"✅ Found poem {len(valid_poems)}/{count}: '{poem.get('title', 'Untitled')}' ({word_count} words)")
+                    else:
+                        print(f"⚠️ Skipping poem '{poem.get('title', 'Untitled')}' - {word_count} words (exceeds {max_words} word limit)")
+                
+                # If we still need more poems, show progress
+                if len(valid_poems) < count:
+                    remaining = count - len(valid_poems)
+                    print(f"📝 Need {remaining} more poem{'s' if remaining != 1 else ''} under {max_words} words (attempt {attempts}/{max_retries})")
+                
+            except Exception as e:
+                print(f"⚠️ Error fetching poems (attempt {attempts}): {e}")
+                continue
+        
+        if len(valid_poems) < count:
+            print(f"⚠️ Only found {len(valid_poems)}/{count} poems under {max_words} words after {attempts} attempts")
+        else:
+            print(f"✅ Successfully found {len(valid_poems)} poem{'s' if len(valid_poems) != 1 else ''} under {max_words} words")
+        
+        return valid_poems
+    
     def create_sample_poems(self, count: int = 3) -> List[Dict]:
         """
         Create sample poems for testing when PoetryDB is not accessible.
