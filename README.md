@@ -1,32 +1,36 @@
-# Daily Artwork Bot 🎨
+# Daily Culture Bot 🎨📝
 
-A Python application that fetches and displays famous paintings with detailed information from Wikidata and Wikimedia Commons. Features a modern HTML gallery for browsing multiple artworks with high-quality images.
+A Python application that fetches and displays famous paintings and random public domain poems. Features a modern HTML gallery for browsing multiple artworks with high-quality images and beautiful poetry from PoetryDB.
 
 ## 🌟 Features
 
-- **🔍 Live Data Fetching**: Pulls fresh painting data from Wikidata using optimized SPARQL queries
+- **🔍 Live Data Fetching**: Pulls fresh painting data from Wikidata and random poems from PoetryDB
 - **🎨 Modern HTML Gallery**: Beautiful, responsive gallery with dark theme and smooth animations
 - **📱 Multiple Artworks**: Fetch 1-10+ artworks in a single command
-- **💾 Local Storage**: Save artwork data and high-quality images locally
+- **📝 Poetry Integration**: Fetch random public domain poems alongside artwork
+- **💾 Local Storage**: Save artwork data, poem data, and high-quality images locally
 - **⚡ Fast Performance**: Optimized queries and smart caching for quick results
-- **🎲 Random Selection**: Different artworks every time with true randomization
+- **🎲 Random Selection**: Different artworks and poems every time with true randomization
 - **📊 Rich Metadata**: Style, medium, museum, origin, and more for each artwork
+- **🎭 Cultural Experience**: Combine visual art with literary art for a complete cultural experience
 
 ## 🏗️ Architecture
 
 ### Core Components
 
-- **`daily_paintings.py`** - Main script that fetches and displays artwork information
+- **`daily_paintings.py`** - Main script that fetches and displays artwork and poem information
 - **`datacreator.py`** - Data fetcher that queries Wikidata for paintings
+- **`poem_fetcher.py`** - Data fetcher that queries PoetryDB for random poems
 - **`requirements.txt`** - Python dependencies
 
 ### How It Works
 
 1. **Data Discovery**: `datacreator.py` queries Wikidata for paintings with images using optimized SPARQL
-2. **Random Selection**: Uses random offset to ensure different artworks each time
-3. **Image Processing**: Downloads high-resolution images from Wikimedia Commons
-4. **Gallery Generation**: Creates modern HTML gallery with responsive design
-5. **Data Export**: Saves artwork metadata to JSON and images locally
+2. **Poetry Fetching**: `poem_fetcher.py` queries PoetryDB for random public domain poems
+3. **Random Selection**: Uses random offset to ensure different artworks and poems each time
+4. **Image Processing**: Downloads high-resolution images from Wikimedia Commons
+5. **Gallery Generation**: Creates modern HTML gallery with responsive design for both art and poetry
+6. **Data Export**: Saves artwork metadata, poem data to JSON and images locally
 
 ## 🚀 Setup
 
@@ -125,6 +129,16 @@ python daily_paintings.py --output --save-image
 python daily_paintings.py --count 5 --output --save-image --html
 ```
 
+### Fetch Artwork and Poems Together
+```bash
+python daily_paintings.py --poems --poem-count 2 --output --html
+```
+
+### Poems Only
+```bash
+python daily_paintings.py --poems-only --poem-count 3 --output
+```
+
 ### Fast Mode (Sample Data Only)
 ```bash
 python daily_paintings.py --count 3 --fast --html
@@ -141,6 +155,9 @@ python daily_paintings.py --help
 - `--save-image, -i` - Download and save artwork images
 - `--html` - Generate modern HTML gallery page
 - `--fast` - Skip API calls and use sample data (much faster)
+- `--poems, -p` - Also fetch random poems
+- `--poem-count COUNT` - Number of poems to fetch (default: 1)
+- `--poems-only` - Fetch only poems, no artwork
 
 ## ⚠️ Error Handling
 
@@ -348,6 +365,7 @@ The modular architecture makes it easy to extend:
 
 - **[Wikidata](https://www.wikidata.org/)** - Painting metadata, artists, museums, dates
 - **[Wikimedia Commons](https://commons.wikimedia.org/)** - High-resolution artwork images
+- **[PoetryDB](https://poetrydb.org/)** - Random public domain poems and poetry metadata
 - **[Wikipedia](https://en.wikipedia.org/)** - Interesting facts about artworks
 
 ## ⚖️ Legal & Ethics

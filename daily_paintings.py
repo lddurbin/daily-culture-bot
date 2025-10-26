@@ -4,17 +4,21 @@ import os
 import tempfile
 from datetime import date
 import datacreator
+import poem_fetcher
 import sys
 import argparse
 
 def parse_arguments():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Daily Artwork Bot - Fetch and display artwork information')
+    parser = argparse.ArgumentParser(description='Daily Culture Bot - Fetch and display artwork and poem information')
     parser.add_argument('--output', '-o', action='store_true', help='Save artwork data to JSON file')
     parser.add_argument('--save-image', '-i', action='store_true', help='Download and save artwork images')
     parser.add_argument('--count', '-c', type=int, default=1, help='Number of artworks to fetch (default: 1)')
     parser.add_argument('--html', action='store_true', help='Generate HTML gallery page')
     parser.add_argument('--fast', action='store_true', help='Skip Wikidata API and use sample data only (much faster)')
+    parser.add_argument('--poems', '-p', action='store_true', help='Also fetch random poems')
+    parser.add_argument('--poem-count', type=int, default=1, help='Number of poems to fetch (default: 1)')
+    parser.add_argument('--poems-only', action='store_true', help='Fetch only poems, no artwork')
     return parser.parse_args()
 
 def download_image(painting, headers, save_dir="."):
@@ -41,7 +45,7 @@ def download_image(painting, headers, save_dir="."):
         print(f"⚠️ Warning: Could not download image for {painting['title']}: {e}")
         return None
 
-def generate_html_gallery(paintings, image_paths, output_filename="artwork_gallery.html"):
+def generate_html_gallery(paintings, image_paths, poems=None, output_filename="artwork_gallery.html"):
     """Generate an HTML gallery page for the artworks."""
     
     html_content = f"""<!DOCTYPE html>
@@ -257,13 +261,118 @@ def generate_html_gallery(paintings, image_paths, output_filename="artwork_galle
             position: relative;
             z-index: 2;
         }}
+        
+        /* Poems Section Styles */
+        .poems-section {{
+            margin-top: 4rem;
+            padding-top: 3rem;
+            border-top: 2px solid #2a2a2a;
+        }}
+        
+        .poems-title {{
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }}
+        
+        .poems-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+        }}
+        
+        .poem-card {{
+            background: #1a1a1a;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid #2a2a2a;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }}
+        
+        .poem-card:hover {{
+            transform: translateY(-4px);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+            border-color: #667eea;
+        }}
+        
+        .poem-title {{
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+        }}
+        
+        .poem-author {{
+            font-size: 1rem;
+            color: #667eea;
+            margin-bottom: 1.5rem;
+            font-weight: 500;
+        }}
+        
+        .poem-text {{
+            margin-bottom: 1.5rem;
+        }}
+        
+        .poem-text pre {{
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #e0e0e0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #0f0f0f;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            margin: 0;
+        }}
+        
+        .poem-meta {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #a0a0a0;
+        }}
+        
+        .poem-lines {{
+            background: #2a2a2a;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 500;
+        }}
+        
+        .poem-source {{
+            font-style: italic;
+        }}
+        
+        @media (max-width: 768px) {{
+            .poems-container {{
+                grid-template-columns: 1fr;
+            }}
+            
+            .poem-card {{
+                padding: 1.5rem;
+            }}
+            
+            .poems-title {{
+                font-size: 2rem;
+            }}
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎨 Daily Artwork Gallery</h1>
-            <p>{date.today().strftime('%B %d, %Y')} • {len(paintings)} Artwork{'s' if len(paintings) != 1 else ''}</p>
+            <h1>🎨 Daily Culture Gallery</h1>
+            <p>{date.today().strftime('%B %d, %Y')} • {len(paintings)} Artwork{'s' if len(paintings) != 1 else ''}{f' • {len(poems)} Poem{"s" if len(poems) != 1 else ""}' if poems else ''}</p>
         </div>
         
         <div class="gallery">"""
@@ -308,10 +417,38 @@ def generate_html_gallery(paintings, image_paths, output_filename="artwork_galle
             </div>"""
     
     html_content += f"""
-        </div>
+        </div>"""
+    
+    # Add poems section if poems are provided
+    if poems:
+        html_content += f"""
+        
+        <div class="poems-section">
+            <h2 class="poems-title">📝 Daily Poems</h2>
+            <div class="poems-container">"""
+        
+        for poem in poems:
+            html_content += f"""
+                <div class="poem-card">
+                    <h3 class="poem-title">{poem['title']}</h3>
+                    <p class="poem-author">by {poem['author']}</p>
+                    <div class="poem-text">
+                        <pre>{poem['text']}</pre>
+                    </div>
+                    <div class="poem-meta">
+                        <span class="poem-lines">{poem['line_count']} lines</span>
+                        <span class="poem-source">{poem['source']}</span>
+                    </div>
+                </div>"""
+        
+        html_content += f"""
+            </div>
+        </div>"""
+    
+    html_content += f"""
         
         <div class="footer">
-            <p>Generated by Daily Artwork Bot • {date.today().strftime('%Y-%m-%d')}</p>
+            <p>Generated by Daily Culture Bot • {date.today().strftime('%Y-%m-%d')}</p>
         </div>
     </div>
 </body>
@@ -325,34 +462,61 @@ def generate_html_gallery(paintings, image_paths, output_filename="artwork_galle
 def main():
     args = parse_arguments()
     
-    # Initialize the data creator
+    # Initialize the data creators
     creator = datacreator.PaintingDataCreator()
+    poem_fetcher_instance = poem_fetcher.PoemFetcher()
     
-    print(f"🎨 Fetching {args.count} painting{'s' if args.count != 1 else ''}...")
+    paintings = []
+    poems = []
     
-    # Get multiple paintings
-    if args.fast:
-        print("⚡ Fast mode: Using sample data only...")
-        paintings = creator.create_sample_paintings(args.count)
-    else:
-        paintings = creator.fetch_paintings(count=args.count)
+    # Fetch paintings unless poems-only mode
+    if not args.poems_only:
+        print(f"🎨 Fetching {args.count} painting{'s' if args.count != 1 else ''}...")
+        
+        # Get multiple paintings
+        if args.fast:
+            print("⚡ Fast mode: Using sample data only...")
+            paintings = creator.create_sample_paintings(args.count)
+        else:
+            paintings = creator.fetch_paintings(count=args.count)
+        
+        if not paintings:
+            print("❌ Could not fetch paintings from Wikidata.")
+            print("💡 Try again later or check your internet connection.")
+            print("💡 You can also use --fast flag to use sample data if needed.")
+            raise ValueError("Failed to fetch paintings from Wikidata API")
+        
+        print(f"✅ Selected {len(paintings)} painting{'s' if len(paintings) != 1 else ''}")
     
-    if not paintings:
-        print("❌ Could not fetch paintings from Wikidata.")
-        print("💡 Try again later or check your internet connection.")
-        print("💡 You can also use --fast flag to use sample data if needed.")
-        raise ValueError("Failed to fetch paintings from Wikidata API")
-    
-    print(f"✅ Selected {len(paintings)} painting{'s' if len(paintings) != 1 else ''}")
+    # Fetch poems if requested
+    if args.poems or args.poems_only:
+        print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''}...")
+        
+        if args.fast:
+            print("⚡ Fast mode: Using sample poem data...")
+            poems = poem_fetcher_instance.create_sample_poems(args.poem_count)
+        else:
+            poems = poem_fetcher_instance.fetch_random_poems(args.poem_count)
+        
+        if not poems:
+            print("❌ Could not fetch poems from PoetryDB.")
+            print("💡 Try again later or check your internet connection.")
+            if not args.poems_only:  # Only raise error if poems-only mode
+                print("💡 Continuing with artwork only...")
+                poems = []
+            else:
+                raise ValueError("Failed to fetch poems from PoetryDB API")
+        else:
+            print(f"✅ Selected {len(poems)} poem{'s' if len(poems) != 1 else ''}")
     
     # Define headers to comply with Wikimedia policy
     headers = {
-        "User-Agent": "DailyCanvasBot/1.0 (https://github.com/yourusername/daily-canvas)"
+        "User-Agent": "DailyCultureBot/1.0 (https://github.com/yourusername/daily-culture-bot)"
     }
     
     # Download images if requested
     image_paths = []
-    if args.save_image:
+    if args.save_image and paintings:
         print("📥 Downloading images...")
         for i, painting in enumerate(paintings):
             print(f"  Downloading image {i+1}/{len(paintings)}: {painting['title']}")
@@ -361,32 +525,51 @@ def main():
     
     # Save to JSON if requested
     if args.output:
-        output_filename = f"artwork_{date.today().strftime('%Y%m%d')}.json"
-        with open(output_filename, 'w', encoding='utf-8') as f:
-            json.dump(paintings, f, indent=2, ensure_ascii=False)
-        print(f"📄 Artwork data saved to: {output_filename}")
+        if paintings:
+            output_filename = f"artwork_{date.today().strftime('%Y%m%d')}.json"
+            with open(output_filename, 'w', encoding='utf-8') as f:
+                json.dump(paintings, f, indent=2, ensure_ascii=False)
+            print(f"📄 Artwork data saved to: {output_filename}")
+        
+        if poems:
+            poem_filename = f"poems_{date.today().strftime('%Y%m%d')}.json"
+            with open(poem_filename, 'w', encoding='utf-8') as f:
+                json.dump(poems, f, indent=2, ensure_ascii=False)
+            print(f"📝 Poems data saved to: {poem_filename}")
     
     # Generate HTML gallery if requested
     if args.html:
-        html_filename = generate_html_gallery(paintings, image_paths)
+        html_filename = generate_html_gallery(paintings, image_paths, poems)
         print(f"🌐 HTML gallery saved to: {html_filename}")
     
     # Display artwork information
-    print("\n" + "="*80)
-    print("ARTWORK INFORMATION")
-    print("="*80)
+    if paintings:
+        print("\n" + "="*80)
+        print("ARTWORK INFORMATION")
+        print("="*80)
+        
+        for i, painting in enumerate(paintings):
+            print(f"\n{i+1}. 🎨 {painting['title']} by {painting['artist']} ({painting['year']})")
+            print(f"   Style: {painting['style']} | Medium: {painting['medium']}")
+            print(f"   Museum: {painting['museum']} | Origin: {painting['origin']}")
+            if i < len(image_paths) and image_paths[i]:
+                print(f"   🖼️ Local image: {image_paths[i]}")
+            else:
+                print(f"   🖼️ Image URL: {painting['image']}")
     
-    for i, painting in enumerate(paintings):
-        print(f"\n{i+1}. 🎨 {painting['title']} by {painting['artist']} ({painting['year']})")
-        print(f"   Style: {painting['style']} | Medium: {painting['medium']}")
-        print(f"   Museum: {painting['museum']} | Origin: {painting['origin']}")
-        if i < len(image_paths) and image_paths[i]:
-            print(f"   🖼️ Local image: {image_paths[i]}")
-        else:
-            print(f"   🖼️ Image URL: {painting['image']}")
+    # Display poem information
+    if poems:
+        print("\n" + "="*80)
+        print("POEM INFORMATION")
+        print("="*80)
+        
+        for i, poem in enumerate(poems):
+            print(f"\n{i+1}. 📝 {poem['title']} by {poem['author']}")
+            print(f"   Lines: {poem['line_count']} | Source: {poem['source']}")
+            print(f"   Text preview: {poem['text'][:100]}...")
     
     print("\n" + "="*80)
-    print("✅ Artwork information retrieved successfully!")
+    print("✅ Culture information retrieved successfully!")
     
     if args.html:
         print(f"\n🌐 Open {html_filename} in your browser to view the gallery!")
