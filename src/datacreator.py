@@ -11,7 +11,7 @@ import requests
 import time
 import random
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import re
 
 
@@ -48,15 +48,17 @@ class PaintingDataCreator:
             "Q12124693": "Regionalism"
         }
 
-    def query_paintings_by_subject(self, q_codes: List[str], limit: int = 50, offset: int = 0, random_order: bool = True) -> List[Dict]:
+    def query_paintings_by_subject(self, q_codes: List[str], limit: int = 50, offset: int = 0, random_order: bool = True, genres: List[str] = None, max_sitelinks: int = 20) -> List[Dict]:
         """
-        Query Wikidata for paintings matching specific subjects/themes.
+        Query Wikidata for paintings matching specific subjects/themes and genres.
         
         Args:
             q_codes: List of Wikidata Q-codes for subjects to match
             limit: Number of results to return
             offset: Offset for pagination
             random_order: Whether to randomize the order of results
+            genres: Optional list of genre Q-codes to filter by
+            max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
             
         Returns:
             List of raw Wikidata results
@@ -67,6 +69,15 @@ class PaintingDataCreator:
         # Create Q-code filter clause
         q_code_filters = " || ".join([f"?subject = wd:{q_code}" for q_code in q_codes])
         
+        # Add genre filtering if provided
+        genre_filter = ""
+        if genres:
+            genre_filters = " || ".join([f"?genre = wd:{genre}" for genre in genres])
+            genre_filter = f"""UNION {{
+            ?painting wdt:P136 ?genre .   # genre
+            FILTER({genre_filters})
+          }}"""
+        
         # Choose ordering
         if random_order:
             order_clause = "ORDER BY RAND()"
@@ -74,9 +85,13 @@ class PaintingDataCreator:
             order_clause = "ORDER BY DESC(?year)"
         
         sparql_query = f"""
-        SELECT ?painting ?image WHERE {{
+        SELECT ?painting ?image ?sitelinks ?subject ?genre WHERE {{
           ?painting wdt:P31 wd:Q3305213 .  # Instance of painting
           ?painting wdt:P18 ?image .        # Has image
+          ?painting wikibase:sitelinks ?sitelinks .  # Wikipedia sitelinks count
+          
+          # Filter out paintings with excessive Wikipedia coverage (fame filter)
+          FILTER(?sitelinks < {max_sitelinks})
           
           # Match by subject/depicts properties
           {{
@@ -85,10 +100,10 @@ class PaintingDataCreator:
           }} UNION {{
             ?painting wdt:P921 ?subject .   # main subject
             FILTER({q_code_filters})
-          }} UNION {{
-            ?painting wdt:P136 ?subject .   # genre
-            FILTER({q_code_filters})
-          }}
+          }}{genre_filter}
+          
+          # Get genre information
+          OPTIONAL {{ ?painting wdt:P136 ?genre . }}
         }}
         {order_clause}
         LIMIT {limit}
@@ -110,7 +125,7 @@ class PaintingDataCreator:
             print(f"Error querying Wikidata for subjects: {e}")
             return []
 
-    def query_wikidata_paintings(self, limit: int = 50, offset: int = 0, filter_type: str = "both", random_order: bool = False) -> List[Dict]:
+    def query_wikidata_paintings(self, limit: int = 50, offset: int = 0, filter_type: str = "both", random_order: bool = False, max_sitelinks: int = 20) -> List[Dict]:
         """
         Query Wikidata for paintings with detailed information.
         
@@ -119,6 +134,7 @@ class PaintingDataCreator:
             offset: Offset for pagination
             filter_type: "license", "age", or "both"
             random_order: Whether to randomize the order of results
+            max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
         """
         
         if filter_type == "license":
@@ -169,9 +185,13 @@ class PaintingDataCreator:
             order_clause = "ORDER BY DESC(?year)"
 
         sparql_query = f"""
-        SELECT ?painting ?image WHERE {{
+        SELECT ?painting ?image ?sitelinks WHERE {{
           ?painting wdt:P31 wd:Q3305213 .  # Instance of painting
           ?painting wdt:P18 ?image .        # Image
+          ?painting wikibase:sitelinks ?sitelinks .  # Wikipedia sitelinks count
+          
+          # Filter out paintings with excessive Wikipedia coverage (fame filter)
+          FILTER(?sitelinks < {max_sitelinks})
           
           {filter_clause}
         }}
@@ -471,7 +491,7 @@ class PaintingDataCreator:
         return sample_paintings[:count]
 
     def fetch_paintings(self, count: int = 1, filter_type: str = "both", random_order: bool = True, 
-                       use_sample_on_error: bool = True) -> List[Dict]:
+                       use_sample_on_error: bool = True, max_sitelinks: int = 20) -> List[Dict]:
         """
         Fetch and process painting data from Wikidata, fallback to sample data if needed.
         
@@ -480,6 +500,7 @@ class PaintingDataCreator:
             filter_type: "license", "age", or "both"
             random_order: Whether to randomize the order of results
             use_sample_on_error: Whether to use sample data if API fails
+            max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
         """
         filter_desc = {"license": "license-based", "age": "age-based", "both": "combined license+age"}
         order_desc = "random order" if random_order else "chronological order"
@@ -508,7 +529,8 @@ class PaintingDataCreator:
                         limit=batch_size, 
                         offset=offset, 
                         filter_type=filter_type,
-                        random_order=random_order
+                        random_order=random_order,
+                        max_sitelinks=max_sitelinks
                     )
                     
                     if not raw_data:
@@ -546,14 +568,16 @@ class PaintingDataCreator:
         # Return only the requested count
         return all_paintings[:count]
 
-    def fetch_paintings_by_subject(self, q_codes: List[str], count: int = 1, use_sample_on_error: bool = True) -> List[Dict]:
+    def fetch_paintings_by_subject(self, q_codes: List[str], count: int = 1, genres: List[str] = None, use_sample_on_error: bool = True, max_sitelinks: int = 20) -> List[Dict]:
         """
-        Fetch paintings matching specific subjects/themes from Wikidata.
+        Fetch paintings matching specific subjects/themes and genres from Wikidata.
         
         Args:
             q_codes: List of Wikidata Q-codes for subjects to match
             count: Number of paintings to fetch
+            genres: Optional list of genre Q-codes to filter by
             use_sample_on_error: Whether to use sample data if API fails
+            max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
             
         Returns:
             List of processed painting dictionaries
@@ -563,6 +587,8 @@ class PaintingDataCreator:
             return []
         
         print(f"Searching for paintings matching subjects: {q_codes}")
+        if genres:
+            print(f"With genre filtering: {genres}")
         
         all_paintings = []
         batch_size = 10
@@ -584,7 +610,9 @@ class PaintingDataCreator:
                         q_codes=q_codes,
                         limit=batch_size, 
                         offset=offset, 
-                        random_order=True
+                        random_order=True,
+                        genres=genres,
+                        max_sitelinks=max_sitelinks
                     )
                     
                     if not raw_data:
@@ -617,7 +645,129 @@ class PaintingDataCreator:
         # Return only the requested count
         return all_paintings[:count]
 
-    def get_daily_painting(self) -> Dict:
+    def fetch_paintings_by_subject_with_scoring(self, poem_analysis: Dict, q_codes: List[str], count: int = 1, 
+                                               genres: List[str] = None, min_score: float = 0.4, 
+                                               max_sitelinks: int = 20) -> List[Tuple[Dict, float]]:
+        """
+        Fetch paintings matching specific subjects/themes and score them for quality.
+        
+        Args:
+            poem_analysis: Dictionary containing poem analysis results
+            q_codes: List of Wikidata Q-codes for subjects to match
+            count: Number of paintings to fetch
+            genres: Optional list of genre Q-codes to filter by
+            min_score: Minimum match quality score (0.0-1.0)
+            max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
+            
+        Returns:
+            List of tuples (painting_dict, score) sorted by score descending
+        """
+        if not q_codes:
+            print("No Q-codes provided for subject-based search")
+            return []
+        
+        print(f"Searching for paintings matching subjects: {q_codes}")
+        if genres:
+            print(f"With genre filtering: {genres}")
+        print(f"Minimum match score: {min_score}")
+        
+        # Fetch larger batch to have more options for scoring
+        batch_size = min(50, count * 10)  # Fetch 10x more than needed for better selection
+        
+        try:
+            raw_data = self.query_paintings_by_subject(
+                q_codes=q_codes,
+                limit=batch_size, 
+                offset=0, 
+                random_order=True,
+                genres=genres,
+                max_sitelinks=max_sitelinks
+            )
+            
+            if not raw_data:
+                print("No subject-based data available.")
+                return []
+            
+            # Process and score each painting
+            scored_paintings = []
+            
+            for item in raw_data:
+                try:
+                    # Get Wikidata URL and image first
+                    wikidata_url = item.get('painting', {}).get('value', '')
+                    image_url = item.get('image', {}).get('value', '')
+                    sitelinks = item.get('sitelinks', {}).get('value', '0')
+                    subject = item.get('subject', {}).get('value', '')
+                    genre = item.get('genre', {}).get('value', '')
+                    
+                    if not wikidata_url or not image_url:
+                        continue
+                    
+                    # Get labels using a separate, simple query
+                    labels = self.get_painting_labels(wikidata_url)
+                    title = labels.get('title', 'Unknown Title')
+                    artist = labels.get('artist', 'Unknown Artist')
+                    
+                    # Skip if we don't have basic info
+                    if title == 'Unknown Title' or artist == 'Unknown Artist':
+                        continue
+                    
+                    # Process image URL
+                    if image_url:
+                        image_url = self.get_high_res_image_url(image_url)
+                    
+                    # Create painting entry
+                    painting_entry = {
+                        "title": self.clean_text(title),
+                        "artist": self.clean_text(artist),
+                        "image": image_url,
+                        "year": None,
+                        "style": "Classical",
+                        "museum": "Unknown Location",
+                        "origin": "Unknown",
+                        "medium": "Oil on canvas",
+                        "dimensions": "Unknown dimensions",
+                        "wikidata": wikidata_url,
+                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "sitelinks": int(sitelinks),
+                        "subject_q_codes": [subject] if subject else [],
+                        "genre_q_codes": [genre] if genre else []
+                    }
+                    
+                    # Score the painting
+                    from . import poem_analyzer
+                    analyzer = poem_analyzer.PoemAnalyzer()
+                    score = analyzer.score_artwork_match(
+                        poem_analysis, 
+                        painting_entry["subject_q_codes"], 
+                        painting_entry["genre_q_codes"]
+                    )
+                    
+                    # Only include paintings that meet minimum score
+                    if score >= min_score:
+                        scored_paintings.append((painting_entry, score))
+                        print(f"Scored: {title} by {artist} (score: {score:.2f})")
+                    
+                    # Add delay to be respectful to APIs
+                    time.sleep(1)
+                    
+                except Exception as e:
+                    print(f"Error processing painting data: {e}")
+                    continue
+            
+            # Sort by score descending
+            scored_paintings.sort(reverse=True, key=lambda x: x[1])
+            
+            print(f"Found {len(scored_paintings)} paintings with score >= {min_score}")
+            
+            # Return only the requested count
+            return scored_paintings[:count]
+            
+        except Exception as e:
+            print(f"Error in scored fetch: {e}")
+            return []
+
+    def get_daily_painting(self, max_sitelinks: int = 20) -> Dict:
         """
         Get a single random painting for daily use.
         Returns a dictionary with painting data or None if no painting found.
@@ -629,14 +779,16 @@ class PaintingDataCreator:
             
             # Query to get multiple paintings and pick one randomly
             sparql_query = f"""
-            SELECT ?painting ?image ?paintingLabel ?artistLabel WHERE {{
+            SELECT ?painting ?image ?paintingLabel ?artistLabel ?sitelinks WHERE {{
               ?painting wdt:P31 wd:Q3305213 .  # Instance of painting
               ?painting wdt:P18 ?image .        # Has image
+              ?painting wikibase:sitelinks ?sitelinks .  # Wikipedia sitelinks count
               ?painting rdfs:label ?paintingLabel .
               ?painting wdt:P170 ?artist .
               ?artist rdfs:label ?artistLabel .
               FILTER(LANG(?paintingLabel) = "en")
               FILTER(LANG(?artistLabel) = "en")
+              FILTER(?sitelinks < {max_sitelinks})
             }}
             LIMIT 10
             OFFSET {random_offset}
