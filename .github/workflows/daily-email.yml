@@ -40,7 +40,7 @@ jobs:
           
       - name: Upload artifacts (optional)
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: daily-culture-${{ github.run_number }}
           path: |
