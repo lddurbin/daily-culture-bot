@@ -14,6 +14,7 @@ A Python application that fetches and displays famous paintings and random publi
 - **🎲 Random Selection**: Different artworks and poems every time with true randomization
 - **📊 Rich Metadata**: Style, medium, museum, origin, and more for each artwork
 - **🎭 Cultural Experience**: Combine visual art with literary art for a complete cultural experience
+- **📧 Email Delivery**: Send artwork and poem content via email with HTML and plain text formats
 
 ## 🏗️ Architecture
 
@@ -23,6 +24,7 @@ A Python application that fetches and displays famous paintings and random publi
 - **`datacreator.py`** - Data fetcher that queries Wikidata for paintings
 - **`poem_fetcher.py`** - Data fetcher that queries PoetryDB for random poems
 - **`poem_analyzer.py`** - Theme analysis and artwork matching for complementary mode
+- **`email_sender.py`** - Email functionality for sending artwork and poem content
 - **`requirements.txt`** - Python dependencies
 
 ### How It Works
@@ -210,6 +212,119 @@ creator = datacreator.PaintingDataCreator()
 paintings = creator.fetch_paintings(count=5)
 print(f'Fetched {len(paintings)} paintings')
 "
+```
+
+## 📧 Email Delivery
+
+The Daily Culture Bot can send artwork and poem content via email with beautiful HTML formatting and plain text alternatives.
+
+### Email Setup
+
+1. **Configure SMTP Settings**: Copy `.env.example` to `.env` and fill in your SMTP details:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Edit `.env` file** with your email provider settings:
+   ```bash
+   # For Siteground (SSL on port 465)
+   SMTP_HOST=mail.yourdomain.com
+   SMTP_PORT=465
+   SMTP_USERNAME=your-email@yourdomain.com
+   SMTP_PASSWORD=your-email-password
+   SMTP_FROM_EMAIL=your-email@yourdomain.com
+   
+   # For Gmail (TLS on port 587)
+   # SMTP_HOST=smtp.gmail.com
+   # SMTP_PORT=587
+   # SMTP_USERNAME=your-email@gmail.com
+   # SMTP_PASSWORD=your-app-password
+   # SMTP_FROM_EMAIL=your-email@gmail.com
+   ```
+
+3. **Gmail Setup**: If using Gmail, you'll need an App Password:
+   - Go to Google Account settings
+   - Enable 2-Factor Authentication
+   - Generate an App Password for "Mail"
+   - Use the App Password (not your regular password)
+
+### Email Usage Examples
+
+**Basic Email Delivery:**
+```bash
+# Send artwork via email (HTML + text)
+python daily_paintings.py --email user@example.com
+
+# Send poems only via email
+python daily_paintings.py --poems-only --email user@example.com
+
+# Send matched artwork and poems
+python daily_paintings.py --complementary --email user@example.com
+```
+
+**Email Format Options:**
+```bash
+# HTML only (with embedded images)
+python daily_paintings.py --email user@example.com --email-format html
+
+# Plain text only (no images)
+python daily_paintings.py --email user@example.com --email-format text
+
+# Both HTML and text (default)
+python daily_paintings.py --email user@example.com --email-format both
+```
+
+**Advanced Email Examples:**
+```bash
+# Multiple artworks and poems via email
+python daily_paintings.py --count 3 --poems --poem-count 2 --email user@example.com
+
+# Fast mode with email (uses sample data)
+python daily_paintings.py --fast --email user@example.com
+
+# Complementary mode with HTML email
+python daily_paintings.py --complementary --email user@example.com --email-format html
+```
+
+### Email Features
+
+- **📧 Dual Format**: Both HTML and plain text versions for maximum compatibility
+- **🖼️ Image Attachments**: High-quality artwork images embedded in HTML emails
+- **🎯 Match Status**: Shows whether artwork was matched to poem themes (complementary mode)
+- **🎭 Theme Detection**: Displays detected poem themes in email content
+- **📱 Responsive Design**: HTML emails work beautifully on desktop and mobile
+- **🔒 Secure**: Uses TLS/SSL encryption for email transmission
+- **⚡ Smart Fallback**: Continues normal workflow even if email fails
+
+### Email Troubleshooting
+
+**Common Issues:**
+
+1. **"Missing required environment variables"**
+   - Check that all SMTP variables are set in your `.env` file
+   - Ensure no typos in variable names
+
+2. **"Authentication failed"**
+   - Verify your SMTP credentials
+   - For Gmail, use App Password (not regular password)
+   - Check that 2FA is enabled for Gmail
+
+3. **"Connection refused"**
+   - Verify SMTP host and port settings
+   - Check firewall settings
+   - Try different ports (587 for TLS, 465 for SSL)
+
+4. **"Invalid email address"**
+   - Ensure email address format is correct
+   - Check for typos in the email address
+
+**Testing Email Setup:**
+```bash
+# Test with fast mode (uses sample data)
+python daily_paintings.py --fast --email your-test-email@example.com
+
+# Test with integration tests (requires TEST_EMAIL_INTEGRATION=true)
+TEST_EMAIL_INTEGRATION=true pytest test_email_sender.py::TestEmailIntegration
 ```
 
 ## 🔧 Configuration
