@@ -643,7 +643,7 @@ def main():
                 print(f"   Primary emotions: {analysis['primary_emotions']}")
             if analysis.get("secondary_emotions"):
                 print(f"   Secondary emotions: {analysis['secondary_emotions']}")
-            if analysis.get("emotional_tone") != "unknown":
+            if analysis.get("emotional_tone") and analysis.get("emotional_tone") != "unknown":
                 print(f"   Emotional tone: {analysis['emotional_tone']}")
             if analysis.get("themes"):
                 print(f"   Themes: {analysis['themes']}")
