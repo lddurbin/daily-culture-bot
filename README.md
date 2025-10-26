@@ -56,13 +56,32 @@ daily-culture-bot/
 
 When using the `--complementary` flag, the workflow changes to create meaningful connections between poems and artwork:
 
-1. **Poem Analysis**: `poem_analyzer.py` analyzes poem content to detect themes (nature, love, water, etc.)
-2. **Theme Mapping**: Maps detected themes to Wikidata entity IDs (Q-codes) for artwork subjects
-3. **Subject-Based Search**: Queries Wikidata for paintings that match the poem's themes
-4. **Intelligent Fallback**: If no matching artwork is found, falls back to random selection with clear notification
-5. **Visual Indicators**: HTML gallery shows match status and detected themes for enhanced experience
+1. **Advanced Poem Analysis**: `poem_analyzer.py` analyzes poem content using OpenAI API to detect:
+   - **Primary & Secondary Emotions**: grief, joy, melancholy, peace, hope, despair, nostalgia
+   - **Emotional Tone**: playful, serious, ironic, melancholic, celebratory, contemplative
+   - **Visual Aesthetics**: mood, color palette, composition style
+   - **Subject Suggestions**: specific artwork subjects that match the poem's feeling
+   - **Avoid Subjects**: subjects that would clash with the poem's tone
+
+2. **Quality Scoring System**: Each potential artwork is scored based on:
+   - **Primary emotion match** (40% weight): Direct alignment with poem's dominant emotions
+   - **Theme/subject match** (30% weight): Thematic alignment with poem content
+   - **Genre alignment** (20% weight): Artwork genre matches emotional tone
+   - **Intensity alignment** (10% weight): Artwork complexity matches poem intensity
+   - **Conflict detection**: Penalizes artwork that conflicts with "avoid subjects"
+
+3. **Fame Filtering**: Automatically filters out overly famous paintings (like Mona Lisa) using Wikipedia sitelinks count:
+   - **Default threshold**: 20 sitelinks (configurable via `--max-fame-level`)
+   - **Lower values**: More obscure artwork (10 = very obscure, 30 = moderately known)
+   - **Higher values**: More famous artwork (50+ = very famous)
+
+4. **Intelligent Matching**: Only accepts artwork with quality scores above minimum threshold (default: 0.4)
+5. **Enhanced Fallback**: If no high-quality matches found, uses random obscure artwork instead of famous pieces
+6. **Visual Indicators**: HTML gallery shows match scores, emotional analysis, and quality indicators
 
 **Supported Themes**: Nature, flowers, water, love, death, war, night, day, city, animals, seasons, and more.
+
+**Example**: A playful poem about "forbidden fruit" will now be matched with light, whimsical artwork rather than somber portraits, thanks to the emotional tone detection and avoid_subjects filtering.
 
 ## 🚀 Setup
 
@@ -70,6 +89,7 @@ When using the `--complementary` flag, the workflow changes to create meaningful
 
 - Python 3.8+
 - Internet connection for API access
+- OpenAI API key (optional, for enhanced emotion analysis)
 
 ### Installation
 
@@ -89,6 +109,60 @@ When using the `--complementary` flag, the workflow changes to create meaningful
    ```bash
    pip install -r requirements.txt
    ```
+
+4. **Set up environment variables (optional)**
+   ```bash
+   cp env.example .env
+   # Edit .env and add your OpenAI API key for enhanced emotion analysis
+   ```
+
+## 🤖 OpenAI Integration (Optional)
+
+For enhanced emotion analysis and better artwork-poem matching, you can integrate OpenAI's GPT models:
+
+### Setup OpenAI API
+
+1. **Get an OpenAI API key** from [OpenAI Platform](https://platform.openai.com/api-keys)
+
+2. **Add to environment variables**:
+   ```bash
+   export OPENAI_API_KEY="sk-your-openai-api-key-here"
+   ```
+   
+   Or add to your `.env` file:
+   ```
+   OPENAI_API_KEY=sk-your-openai-api-key-here
+   ```
+
+### Benefits of OpenAI Integration
+
+- **Emotion Detection**: Identifies grief, joy, melancholy, peace, hope, despair, nostalgia, etc.
+- **Mood Analysis**: Determines overall mood (somber, celebratory, contemplative, etc.)
+- **Visual Suggestions**: Provides specific artwork recommendations (mourning scenes, solitary figures, etc.)
+- **Intensity Scoring**: Rates emotional intensity on a 1-10 scale
+- **Better Matching**: More accurate artwork selection based on emotional tone
+
+### Example Analysis
+
+For a grief poem like "Epitaph on her Son H. P." by Katherine Philips:
+
+**Without OpenAI (keyword analysis):**
+- Themes: death, loss
+- Q-codes: Q4 (death), Q198 (war)
+
+**With OpenAI (enhanced analysis):**
+- Emotions: grief, melancholy
+- Themes: death, loss, childhood, memory
+- Mood: somber
+- Intensity: 8/10
+- Visual suggestions: mourning scenes, solitary figures, memorial art
+- Q-codes: Q4 (death), Q203 (mourning), Q2912397 (memorial), Q134307 (portrait)
+
+### Cost Considerations
+
+- Uses GPT-3.5-turbo for cost efficiency (~$0.002 per poem analysis)
+- Typical daily usage costs less than $0.01
+- Falls back to keyword analysis if API unavailable
 
 ## 🎯 Usage
 
@@ -176,6 +250,15 @@ python daily_culture_bot.py --complementary --poem-count 3 --html
 
 # Fast mode with complementary matching
 python daily_culture_bot.py --complementary --fast --html
+
+# High-quality matching with custom thresholds
+python daily_culture_bot.py --complementary --min-match-score 0.6 --max-fame-level 15
+
+# Very obscure artwork only (fame level 10)
+python daily_culture_bot.py --complementary --max-fame-level 10 --html
+
+# Relaxed matching (lower quality threshold)
+python daily_culture_bot.py --complementary --min-match-score 0.2 --html
 ```
 
 ### Poems Only
@@ -203,6 +286,10 @@ python daily_culture_bot.py --help
 - `--poem-count COUNT` - Number of poems to fetch (default: 1)
 - `--poems-only` - Fetch only poems, no artwork
 - `--complementary` - Match artwork to poem themes (automatically enables --poems)
+- `--max-fame-level LEVEL` - Maximum fame level (sitelinks) for artwork (default: 20, lower=more obscure)
+- `--min-match-score SCORE` - Minimum match quality score 0.0-1.0 (default: 0.4)
+- `--email EMAIL` - Email address to send content to (enables email feature)
+- `--email-format FORMAT` - Email format: html, text, or both (default: both)
 
 ## ⚠️ Error Handling
 
@@ -275,6 +362,10 @@ python daily_culture_bot.py --email user@example.com
 python daily_culture_bot.py --poems-only --email user@example.com
 
 # Send matched artwork and poems
+python daily_culture_bot.py --complementary --email user@example.com
+
+# With OpenAI API for enhanced emotion analysis
+export OPENAI_API_KEY="sk-your-key-here"
 python daily_culture_bot.py --complementary --email user@example.com
 ```
 
