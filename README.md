@@ -400,7 +400,41 @@ ARTWORK INFORMATION
 
 ### GitHub Actions Setup
 
-Create `.github/workflows/daily-artwork.yml`:
+#### Daily Email Delivery
+
+The repository includes a GitHub Action that automatically sends daily emails with artwork and poems. The workflow is already configured in `.github/workflows/daily-email.yml`.
+
+**Setup Instructions:**
+
+1. **Configure GitHub Secrets** in your repository settings:
+   - Go to your repository → Settings → Secrets and variables → Actions
+   - Add the following secrets:
+     - `SMTP_HOST` - Your SMTP server (e.g., `smtp.gmail.com`)
+     - `SMTP_PORT` - SMTP port (e.g., `587` for TLS, `465` for SSL)
+     - `SMTP_USERNAME` - Your email username
+     - `SMTP_PASSWORD` - Your email password or app password
+     - `SMTP_FROM_EMAIL` - Your email address
+     - `EMAIL_RECIPIENT` - The email address to send daily emails to
+
+2. **Gmail Setup** (if using Gmail):
+   - Enable 2-Factor Authentication in your Google Account
+   - Generate an App Password for "Mail"
+   - Use the App Password (not your regular password) in `SMTP_PASSWORD`
+
+3. **Schedule**: The workflow runs daily at 9:00 AM UTC by default
+   - You can manually trigger it from the Actions tab
+   - Modify the cron schedule in the workflow file if needed
+
+**Workflow Features:**
+- Sends complementary artwork and poems via email
+- Includes both HTML and plain text formats
+- Automatically matches artwork to poem themes
+- Uploads artifacts for 7 days retention
+- Handles errors gracefully
+
+#### Basic Artwork Fetching
+
+For basic artwork fetching without email, create `.github/workflows/daily-artwork.yml`:
 
 ```yaml
 name: Daily Artwork Fetch
