@@ -34,6 +34,8 @@ jobs:
           SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
           # Email recipient - Set this as a GitHub Secret
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
+          # OpenAI API Key for enhanced poem analysis - Set this as a GitHub Secret
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           # Send complementary artwork and poem via email
           python daily_culture_bot.py --complementary --email "$EMAIL_RECIPIENT" --email-format html
