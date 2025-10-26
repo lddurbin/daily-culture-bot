@@ -167,7 +167,6 @@ class PoemAnalyzer:
                 "keywords": ["memory", "past", "old", "remember", "childhood", "home", "familiar"]
             }
         }
-        }
         
         # Compile regex patterns for better performance
         self._compile_patterns()
