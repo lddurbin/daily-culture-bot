@@ -43,6 +43,10 @@ def parse_arguments():
     parser.add_argument('--email', help='Email address to send content to (enables email feature)')
     parser.add_argument('--email-format', choices=['html', 'text', 'both'], default='both', 
                        help='Email format: html, text, or both (default: both)')
+    parser.add_argument('--max-fame-level', type=int, default=20, 
+                       help='Maximum fame level (sitelinks) for artwork (default: 20, lower=more obscure)')
+    parser.add_argument('--min-match-score', type=float, default=0.4,
+                       help='Minimum match quality score 0.0-1.0 (default: 0.4)')
     
     args = parser.parse_args()
     
@@ -456,7 +460,7 @@ def generate_html_gallery(paintings, image_paths, poems=None, match_status=None,
         status = match_status[i] if match_status and i < len(match_status) else "unknown"
         status_badge = ""
         if status == "matched":
-            status_badge = '<span class="match-badge matched">🎯 Matched to Poem</span>'
+            status_badge = '<span class="match-badge matched">🎯 Emotion-Matched</span>'
         elif status == "fallback":
             status_badge = '<span class="match-badge fallback">🎲 Random Selection</span>'
         elif status == "sample":
@@ -607,37 +611,92 @@ def main():
         print(f"✅ Selected {len(poems)} poem{'s' if len(poems) != 1 else ''}")
         
         # Analyze poems and fetch matching artwork
-        print("🔍 Analyzing poem themes...")
+        print("🔍 Analyzing poem themes and emotions...")
         poem_analyses = poem_analyzer_instance.analyze_multiple_poems(poems)
         
-        # Get combined Q-codes from all poems
+        # Get combined Q-codes from all poems (themes + emotions)
         all_q_codes = poem_analyzer_instance.get_combined_q_codes(poem_analyses)
         
+        # Get emotion-specific Q-codes and genres
+        emotion_q_codes = []
+        emotion_genres = []
+        for analysis in poem_analyses:
+            if analysis.get("emotions"):
+                emotion_q_codes.extend(poem_analyzer_instance.get_emotion_q_codes(analysis["emotions"]))
+                # Add genre Q-codes for emotions
+                for emotion in analysis["emotions"]:
+                    emotion_lower = emotion.lower()
+                    if emotion_lower in poem_analyzer_instance.emotion_mappings:
+                        emotion_genres.extend(poem_analyzer_instance.emotion_mappings[emotion_lower]["genres"])
+        
+        # Combine all Q-codes
+        all_q_codes.extend(emotion_q_codes)
+        all_q_codes = list(set(all_q_codes))  # Remove duplicates
+        emotion_genres = list(set(emotion_genres))  # Remove duplicates
+        
+        # Print analysis results
+        for i, analysis in enumerate(poem_analyses):
+            poem = poems[i]
+            print(f"\n📝 Analysis for '{poem['title']}':")
+            print(f"   Method: {analysis.get('analysis_method', 'unknown')}")
+            if analysis.get("primary_emotions"):
+                print(f"   Primary emotions: {analysis['primary_emotions']}")
+            if analysis.get("secondary_emotions"):
+                print(f"   Secondary emotions: {analysis['secondary_emotions']}")
+            if analysis.get("emotional_tone") != "unknown":
+                print(f"   Emotional tone: {analysis['emotional_tone']}")
+            if analysis.get("themes"):
+                print(f"   Themes: {analysis['themes']}")
+            if analysis.get("imagery_type"):
+                print(f"   Imagery type: {analysis['imagery_type']}")
+            if analysis.get("visual_aesthetic"):
+                aesthetic = analysis['visual_aesthetic']
+                print(f"   Visual aesthetic: {aesthetic.get('mood', 'unknown')} mood, {aesthetic.get('color_palette', 'unknown')} colors")
+            if analysis.get("intensity"):
+                print(f"   Intensity: {analysis['intensity']}/10")
+            if analysis.get("subject_suggestions"):
+                print(f"   Subject suggestions: {analysis['subject_suggestions']}")
+            if analysis.get("avoid_subjects"):
+                print(f"   Avoid subjects: {analysis['avoid_subjects']}")
+        
         if all_q_codes:
-            print(f"🎨 Searching for artwork matching themes: {all_q_codes}")
+            print(f"\n🎨 Searching for artwork matching themes and emotions: {all_q_codes}")
+            if emotion_genres:
+                print(f"   With genre filtering: {emotion_genres}")
             
             if args.fast:
                 print("⚡ Fast mode: Using sample artwork data...")
                 paintings = creator.create_sample_paintings(args.count)
                 match_status = ["sample"] * len(paintings)
             else:
-                # Try to fetch matching artwork
-                paintings = creator.fetch_paintings_by_subject(all_q_codes, count=args.count)
+                # Try to fetch matching artwork with scoring system
+                scored_results = creator.fetch_paintings_by_subject_with_scoring(
+                    poem_analysis=poem_analyses[0],
+                    q_codes=all_q_codes, 
+                    count=args.count,
+                    genres=emotion_genres if emotion_genres else None,
+                    min_score=args.min_match_score,
+                    max_sitelinks=args.max_fame_level
+                )
                 
-                if paintings:
+                if scored_results:
+                    paintings = [painting for painting, score in scored_results]
+                    scores = [score for painting, score in scored_results]
                     match_status = ["matched"] * len(paintings)
-                    print(f"✅ Found {len(paintings)} artwork{'s' if len(paintings) != 1 else ''} matching poem themes")
+                    print(f"✅ Found {len(paintings)} high-quality matches (score >= {args.min_match_score})")
+                    for i, (painting, score) in enumerate(scored_results):
+                        print(f"   - {painting['title']} by {painting['artist']} (match score: {score:.2f})")
                 else:
-                    print("⚠️ No artwork found matching poem themes, using random artwork")
-                    paintings = creator.fetch_paintings(count=args.count)
+                    print(f"⚠️ No high-quality matches found (score >= {args.min_match_score}), using random obscure artwork")
+                    paintings = creator.fetch_paintings(count=args.count, max_sitelinks=args.max_fame_level)
                     match_status = ["fallback"] * len(paintings)
         else:
-            print("⚠️ No themes detected in poems, using random artwork")
+            print("⚠️ No themes or emotions detected in poems, using random obscure artwork")
             if args.fast:
                 paintings = creator.create_sample_paintings(args.count)
                 match_status = ["sample"] * len(paintings)
             else:
-                paintings = creator.fetch_paintings(count=args.count)
+                paintings = creator.fetch_paintings(count=args.count, max_sitelinks=args.max_fame_level)
                 match_status = ["fallback"] * len(paintings)
     
     # Regular mode (paintings first, then poems if requested)
@@ -651,7 +710,7 @@ def main():
                 print("⚡ Fast mode: Using sample data only...")
                 paintings = creator.create_sample_paintings(args.count)
             else:
-                paintings = creator.fetch_paintings(count=args.count)
+                paintings = creator.fetch_paintings(count=args.count, max_sitelinks=args.max_fame_level)
             
             if not paintings:
                 print("❌ Could not fetch paintings from Wikidata.")
