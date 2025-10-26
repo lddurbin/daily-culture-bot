@@ -453,5 +453,97 @@ class TestQueryWikidataPaintings:
         assert result == []
 
 
+class TestSitelinksFiltering:
+    """Test sitelinks filtering functionality."""
+    
+    @patch('datacreator.requests.Session.get')
+    def test_query_paintings_by_subject_with_sitelinks_filter(self, mock_get):
+        """Test that sitelinks filtering is applied in SPARQL query."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'painting': {'value': 'url1'}, 
+                        'image': {'value': 'img1'},
+                        'sitelinks': {'value': '15'},  # Below threshold
+                        'subject': {'value': 'Q7860'},
+                        'genre': {'value': 'Q191163'}
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        creator = datacreator.PaintingDataCreator()
+        result = creator.query_paintings_by_subject(['Q7860'], max_sitelinks=20)
+        
+        assert len(result) == 1
+        # Verify the request was made with sitelinks filter
+        mock_get.assert_called_once()
+        call_args = mock_get.call_args
+        query = call_args[1]['params']['query']
+        assert 'wikibase:sitelinks' in query
+        assert 'FILTER(?sitelinks < 20)' in query
+    
+    @patch('datacreator.requests.Session.get')
+    def test_query_wikidata_paintings_with_sitelinks_filter(self, mock_get):
+        """Test that sitelinks filtering is applied in regular Wikidata query."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'painting': {'value': 'url1'}, 
+                        'image': {'value': 'img1'},
+                        'sitelinks': {'value': '5'}  # Below threshold
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        creator = datacreator.PaintingDataCreator()
+        result = creator.query_wikidata_paintings(max_sitelinks=10)
+        
+        assert len(result) == 1
+        # Verify the request was made with sitelinks filter
+        mock_get.assert_called_once()
+        call_args = mock_get.call_args
+        query = call_args[1]['params']['query']
+        assert 'wikibase:sitelinks' in query
+        assert 'FILTER(?sitelinks < 10)' in query
+    
+    def test_fetch_paintings_passes_max_sitelinks(self):
+        """Test that fetch_paintings passes max_sitelinks parameter."""
+        creator = datacreator.PaintingDataCreator()
+        
+        with patch.object(creator, 'query_wikidata_paintings') as mock_query:
+            mock_query.return_value = []
+            
+            creator.fetch_paintings(count=1, max_sitelinks=15)
+            
+            # Verify max_sitelinks was passed to query method
+            mock_query.assert_called()
+            call_args = mock_query.call_args
+            assert call_args[1]['max_sitelinks'] == 15
+    
+    def test_fetch_paintings_by_subject_passes_max_sitelinks(self):
+        """Test that fetch_paintings_by_subject passes max_sitelinks parameter."""
+        creator = datacreator.PaintingDataCreator()
+        
+        with patch.object(creator, 'query_paintings_by_subject') as mock_query:
+            mock_query.return_value = []
+            
+            creator.fetch_paintings_by_subject(['Q7860'], count=1, max_sitelinks=25)
+            
+            # Verify max_sitelinks was passed to query method
+            mock_query.assert_called()
+            call_args = mock_query.call_args
+            assert call_args[1]['max_sitelinks'] == 25
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

@@ -9,7 +9,8 @@ including theme detection, Q-code mapping, and edge cases.
 import pytest
 import sys
 import os
-from unittest.mock import Mock, patch
+import json
+from unittest.mock import Mock, patch, MagicMock
 
 # Add parent directory to path to import modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -424,6 +425,376 @@ class TestPerformance:
         
         assert len(analyses) == 100
         assert all(analysis["has_themes"] for analysis in analyses)
+
+
+class TestOpenAIIntegration:
+    """Test OpenAI integration functionality."""
+    
+    def test_openai_initialization_with_key(self):
+        """Test OpenAI client initialization when API key is present."""
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
+            with patch('src.poem_analyzer.OpenAI') as mock_openai:
+                mock_client = Mock()
+                mock_openai.return_value = mock_client
+                
+                analyzer = poem_analyzer.PoemAnalyzer()
+                
+                assert analyzer.openai_client is not None
+                mock_openai.assert_called_once_with(api_key='test-key')
+    
+    def test_openai_initialization_without_key(self):
+        """Test OpenAI client initialization when API key is missing."""
+        with patch.dict('os.environ', {}, clear=True):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            assert analyzer.openai_client is None
+    
+    def test_openai_initialization_with_error(self):
+        """Test OpenAI client initialization when initialization fails."""
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key'}):
+            with patch('src.poem_analyzer.OpenAI', side_effect=Exception("API Error")):
+                analyzer = poem_analyzer.PoemAnalyzer()
+                assert analyzer.openai_client is None
+    
+    @patch('src.poem_analyzer.OpenAI')
+    def test_analyze_poem_with_ai_success(self, mock_openai_class):
+        """Test successful AI analysis of a poem."""
+        # Mock OpenAI client
+        mock_client = Mock()
+        mock_openai_class.return_value = mock_client
+        
+        # Mock API response
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = '{"emotions": ["grief", "melancholy"], "themes": ["death", "loss"], "mood": "somber", "intensity": 8, "visual_suggestions": ["mourning scenes", "solitary figures"]}'
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        # Set up analyzer with mocked client
+        analyzer = poem_analyzer.PoemAnalyzer()
+        analyzer.openai_client = mock_client
+        
+        poem = {
+            "title": "Epitaph on her Son H. P.",
+            "text": "What on Earth deserves our trust? Youth and Beauty both are dust..."
+        }
+        
+        result = analyzer.analyze_poem_with_ai(poem)
+        
+        assert result["emotions"] == ["grief", "melancholy"]
+        assert result["themes"] == ["death", "loss"]
+        assert result["mood"] == "somber"
+        assert result["intensity"] == 8
+        assert "mourning scenes" in result["visual_suggestions"]
+        assert len(result["q_codes"]) > 0  # Should have Q-codes for grief/death
+    
+    @patch('src.poem_analyzer.OpenAI')
+    def test_analyze_poem_with_ai_json_error(self, mock_openai_class):
+        """Test AI analysis when JSON parsing fails."""
+        mock_client = Mock()
+        mock_openai_class.return_value = mock_client
+        
+        # Mock response with invalid JSON
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = 'Invalid JSON response'
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        analyzer = poem_analyzer.PoemAnalyzer()
+        analyzer.openai_client = mock_client
+        
+        poem = {"title": "Test", "text": "Test poem"}
+        
+        with pytest.raises(ValueError, match="Could not parse JSON"):
+            analyzer.analyze_poem_with_ai(poem)
+    
+    @patch('src.poem_analyzer.OpenAI')
+    def test_analyze_poem_with_ai_api_error(self, mock_openai_class):
+        """Test AI analysis when API call fails."""
+        mock_client = Mock()
+        mock_openai_class.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = Exception("API Error")
+        
+        analyzer = poem_analyzer.PoemAnalyzer()
+        analyzer.openai_client = mock_client
+        
+        poem = {"title": "Test", "text": "Test poem"}
+        
+        with pytest.raises(ValueError, match="OpenAI API error"):
+            analyzer.analyze_poem_with_ai(poem)
+    
+    def test_analyze_poem_without_openai(self):
+        """Test poem analysis falls back to keyword analysis when OpenAI not available."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        analyzer.openai_client = None  # Simulate no OpenAI
+        
+        poem = {
+            "title": "Epitaph on her Son H. P.",
+            "text": "What on Earth deserves our trust? Youth and Beauty both are dust. Long we gathering are with pain, What one moment calls again."
+        }
+        
+        result = analyzer.analyze_poem(poem)
+        
+        assert result["analysis_method"] == "keyword_only"
+        assert "death" in result["themes"]  # Should detect death theme
+        assert len(result["q_codes"]) > 0
+    
+    @patch('src.poem_analyzer.OpenAI')
+    def test_analyze_poem_with_openai_success(self, mock_openai_class):
+        """Test poem analysis with successful OpenAI integration."""
+        mock_client = Mock()
+        mock_openai_class.return_value = mock_client
+        
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = '{"emotions": ["grief"], "themes": ["death"], "mood": "somber", "intensity": 9, "visual_suggestions": ["mourning scenes"]}'
+        mock_client.chat.completions.create.return_value = mock_response
+        
+        analyzer = poem_analyzer.PoemAnalyzer()
+        analyzer.openai_client = mock_client
+        
+        poem = {
+            "title": "Epitaph on her Son H. P.",
+            "text": "What on Earth deserves our trust? Youth and Beauty both are dust."
+        }
+        
+        result = analyzer.analyze_poem(poem)
+        
+        assert result["analysis_method"] == "ai_enhanced"
+        assert "grief" in result["emotions"]
+        assert "death" in result["themes"]
+        assert result["mood"] == "somber"
+        assert result["intensity"] == 9
+
+
+class TestEmotionMapping:
+    """Test emotion-aware Q-code mapping functionality."""
+    
+    def test_emotion_q_codes_mapping(self):
+        """Test emotion to Q-code mapping."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        emotions = ["grief", "joy", "peace"]
+        q_codes = analyzer.get_emotion_q_codes(emotions)
+        
+        assert len(q_codes) > 0
+        # Should include Q-codes for grief (Q4, Q203), joy, and peace
+        assert "Q4" in q_codes  # death
+        assert "Q203" in q_codes  # mourning
+    
+    def test_emotion_mappings_structure(self):
+        """Test that emotion mappings have correct structure."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        for emotion, mapping in analyzer.emotion_mappings.items():
+            assert "q_codes" in mapping
+            assert "genres" in mapping
+            assert "keywords" in mapping
+            assert isinstance(mapping["q_codes"], list)
+            assert isinstance(mapping["genres"], list)
+            assert isinstance(mapping["keywords"], list)
+            assert len(mapping["q_codes"]) > 0
+    
+    def test_grief_poem_analysis(self):
+        """Test analysis of the specific grief poem from the example."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        analyzer.openai_client = None  # Use keyword analysis
+        
+        grief_poem = {
+            "title": "Epitaph on her Son H. P.",
+            "text": """What on Earth deserves our trust?
+Youth and Beauty both are dust.
+Long we gathering are with pain,
+What one moment calls again.
+Seven years childless, marriage past,
+A Son, a son is born at last:
+So exactly lim'd and fair.
+Full of good Spirits, Meen, and Air,
+As a long life promised,
+Yet, in less than six weeks dead.
+Too promising, too great a mind
+In so small room to be confin'd:
+Therefore, as fit in Heav'n to dwell,
+He quickly broke the Prison shell.
+So the subtle Alchimist,
+Can't with Hermes Seal resist
+The powerful spirit's subtler flight,
+But t'will bid him long good night.
+And so the Sun if it arise
+Half so glorious as his Eyes,
+Like this Infant, takes a shrowd,
+Buried in a morning Cloud."""
+        }
+        
+        result = analyzer.analyze_poem(grief_poem)
+        
+        # Should detect death-related themes
+        assert "death" in result["themes"]
+        assert len(result["q_codes"]) > 0
+        
+        # Should include grief-related Q-codes
+        grief_q_codes = analyzer.get_emotion_q_codes(["grief"])
+        assert any(q_code in result["q_codes"] for q_code in grief_q_codes)
+
+
+class TestScoringSystem:
+    """Test the artwork scoring system."""
+    
+    def test_score_artwork_match_empty_inputs(self):
+        """Test scoring with empty inputs."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Empty poem analysis
+        score = analyzer.score_artwork_match({}, ["Q4"], ["Q134307"])
+        assert score == 0.0
+        
+        # Empty artwork Q-codes
+        poem_analysis = {"primary_emotions": ["grief"], "themes": ["death"]}
+        score = analyzer.score_artwork_match(poem_analysis, [], ["Q134307"])
+        assert score == 0.0
+    
+    def test_score_artwork_match_primary_emotion(self):
+        """Test scoring for primary emotion matches."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": ["grief"],
+            "secondary_emotions": [],
+            "themes": [],
+            "emotional_tone": "serious",
+            "intensity": 8,
+            "avoid_subjects": []
+        }
+        
+        # Perfect match with grief Q-codes
+        grief_q_codes = analyzer.emotion_mappings["grief"]["q_codes"]
+        score = analyzer.score_artwork_match(poem_analysis, grief_q_codes, [])
+        
+        assert score >= 0.4  # Should get full primary emotion weight
+    
+    def test_score_artwork_match_secondary_emotion(self):
+        """Test scoring for secondary emotion matches."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "secondary_emotions": ["melancholy"],
+            "themes": [],
+            "emotional_tone": "playful",
+            "intensity": 5,
+            "avoid_subjects": []
+        }
+        
+        # Match with secondary emotion Q-codes
+        melancholy_q_codes = analyzer.emotion_mappings["melancholy"]["q_codes"]
+        score = analyzer.score_artwork_match(poem_analysis, melancholy_q_codes, [])
+        
+        assert score >= 0.2  # Should get secondary emotion weight
+        assert score < 0.4   # But less than primary emotion weight
+    
+    def test_score_artwork_match_theme_match(self):
+        """Test scoring for theme matches."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": [],
+            "secondary_emotions": [],
+            "themes": ["nature"],
+            "emotional_tone": "contemplative",
+            "intensity": 5,
+            "avoid_subjects": []
+        }
+        
+        # Match with nature theme Q-codes
+        nature_q_codes = analyzer.theme_mappings["nature"]["q_codes"]
+        score = analyzer.score_artwork_match(poem_analysis, nature_q_codes, [])
+        
+        assert score >= 0.3  # Should get theme match weight
+    
+    def test_score_artwork_match_genre_alignment(self):
+        """Test scoring for genre alignment."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": [],
+            "secondary_emotions": [],
+            "themes": [],
+            "emotional_tone": "serious",
+            "intensity": 5,
+            "avoid_subjects": []
+        }
+        
+        # Serious tone should match portrait genre
+        score = analyzer.score_artwork_match(poem_analysis, [], ["Q134307"])  # portrait
+        
+        assert score >= 0.2  # Should get genre alignment weight
+    
+    def test_score_artwork_match_avoid_subjects_conflict(self):
+        """Test scoring penalty for avoid_subjects conflicts."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "secondary_emotions": [],
+            "themes": [],
+            "emotional_tone": "playful",
+            "intensity": 5,
+            "avoid_subjects": ["death"]
+        }
+        
+        # Good match but conflicts with avoid_subjects
+        joy_q_codes = analyzer.emotion_mappings["joy"]["q_codes"]
+        death_q_codes = analyzer.theme_mappings["death"]["q_codes"]
+        conflicting_q_codes = joy_q_codes + death_q_codes
+        
+        score = analyzer.score_artwork_match(poem_analysis, conflicting_q_codes, [])
+        
+        # Should be penalized due to conflict
+        assert score < 0.4  # Should be less than normal primary emotion score
+    
+    def test_score_artwork_match_comprehensive(self):
+        """Test comprehensive scoring with multiple factors."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": ["grief"],
+            "secondary_emotions": ["melancholy"],
+            "themes": ["death"],
+            "emotional_tone": "serious",
+            "intensity": 8,
+            "avoid_subjects": []
+        }
+        
+        # Combine multiple matching factors
+        grief_q_codes = analyzer.emotion_mappings["grief"]["q_codes"]
+        death_q_codes = analyzer.theme_mappings["death"]["q_codes"]
+        portrait_genres = ["Q134307"]  # portrait
+        
+        all_q_codes = grief_q_codes + death_q_codes
+        
+        score = analyzer.score_artwork_match(poem_analysis, all_q_codes, portrait_genres)
+        
+        # Should get high score from multiple matches
+        assert score >= 0.7  # Primary emotion + theme + genre alignment
+    
+    def test_score_artwork_match_intensity_alignment(self):
+        """Test scoring for intensity alignment."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": [],
+            "secondary_emotions": [],
+            "themes": [],
+            "emotional_tone": "unknown",
+            "intensity": 8,
+            "avoid_subjects": []
+        }
+        
+        # High complexity artwork (many Q-codes) should match high intensity
+        high_complexity_q_codes = ["Q1", "Q2", "Q3", "Q4", "Q5"]  # 5 Q-codes = complexity 10
+        
+        score = analyzer.score_artwork_match(poem_analysis, high_complexity_q_codes, [])
+        
+        # Should get some intensity alignment bonus
+        assert score > 0.0
 
 
 if __name__ == '__main__':
