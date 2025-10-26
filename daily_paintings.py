@@ -584,6 +584,21 @@ def main():
         
         print(f"✅ Selected {len(poems)} poem{'s' if len(poems) != 1 else ''}")
         
+        # Apply word count filtering for email
+        if args.email:
+            print("📧 Email mode: Filtering poems to 200 words or fewer...")
+            original_count = len(poems)
+            poems = poem_fetcher_instance.filter_poems_by_word_count(poems, max_words=200)
+            filtered_count = len(poems)
+            
+            if filtered_count < original_count:
+                print(f"📝 Filtered out {original_count - filtered_count} poem{'s' if original_count - filtered_count != 1 else ''} exceeding 200 words")
+            
+            if not poems:
+                print("⚠️ No poems under 200 words found. Email will be sent without poems.")
+            else:
+                print(f"✅ {filtered_count} poem{'s' if filtered_count != 1 else ''} selected for email (≤200 words each)")
+        
         # Analyze poems and fetch matching artwork
         print("🔍 Analyzing poem themes...")
         poem_analyses = poem_analyzer_instance.analyze_multiple_poems(poems)
@@ -660,6 +675,21 @@ def main():
                 raise ValueError("Failed to fetch poems from PoetryDB API")
         else:
             print(f"✅ Selected {len(poems)} poem{'s' if len(poems) != 1 else ''}")
+            
+            # Apply word count filtering for email
+            if args.email:
+                print("📧 Email mode: Filtering poems to 200 words or fewer...")
+                original_count = len(poems)
+                poems = poem_fetcher_instance.filter_poems_by_word_count(poems, max_words=200)
+                filtered_count = len(poems)
+                
+                if filtered_count < original_count:
+                    print(f"📝 Filtered out {original_count - filtered_count} poem{'s' if original_count - filtered_count != 1 else ''} exceeding 200 words")
+                
+                if not poems:
+                    print("⚠️ No poems under 200 words found. Email will be sent without poems.")
+                else:
+                    print(f"✅ {filtered_count} poem{'s' if filtered_count != 1 else ''} selected for email (≤200 words each)")
     
     # Define headers to comply with Wikimedia policy
     headers = {

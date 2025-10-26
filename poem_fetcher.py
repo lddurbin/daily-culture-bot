@@ -124,6 +124,51 @@ class PoemFetcher:
             return ""
         return text.strip().replace('\n', ' ').replace('\r', ' ')
     
+    def count_words(self, poem: Dict) -> int:
+        """
+        Count the number of words in a poem.
+        
+        Args:
+            poem: Poem dictionary with 'text' field
+            
+        Returns:
+            Number of words in the poem
+        """
+        if not poem or 'text' not in poem:
+            return 0
+        
+        text = poem['text']
+        if not text:
+            return 0
+        
+        # Split by whitespace and filter out empty strings
+        words = [word for word in text.split() if word.strip()]
+        return len(words)
+    
+    def filter_poems_by_word_count(self, poems: List[Dict], max_words: int = 200) -> List[Dict]:
+        """
+        Filter poems to only include those with word count <= max_words.
+        
+        Args:
+            poems: List of poem dictionaries
+            max_words: Maximum number of words allowed (default: 200)
+            
+        Returns:
+            List of poems that meet the word count criteria
+        """
+        filtered_poems = []
+        
+        for poem in poems:
+            word_count = self.count_words(poem)
+            if word_count <= max_words:
+                # Add word count to the poem data for reference
+                poem['word_count'] = word_count
+                filtered_poems.append(poem)
+            else:
+                print(f"⚠️ Skipping poem '{poem.get('title', 'Untitled')}' - {word_count} words (exceeds {max_words} word limit)")
+        
+        return filtered_poems
+    
     def create_sample_poems(self, count: int = 3) -> List[Dict]:
         """
         Create sample poems for testing when PoetryDB is not accessible.
