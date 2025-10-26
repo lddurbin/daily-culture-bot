@@ -4,7 +4,7 @@ This document describes the testing setup and strategy for the Daily Artwork Bot
 
 ## Test Suite Overview
 
-The project includes a comprehensive test suite with **45 tests** covering:
+The project includes a comprehensive test suite with **160 tests** covering:
 - Command-line argument parsing
 - Image download functionality
 - HTML gallery generation
@@ -14,10 +14,20 @@ The project includes a comprehensive test suite with **45 tests** covering:
 - API integration (with mocking)
 - Error handling
 - Edge cases
+- Email functionality
+- Poem analysis and theme detection
+- Poem fetching and filtering
+- Complementary art-poem matching
+- OpenAI integration
+- Emotional analysis
+- Artwork scoring system
 
-**Current Coverage**: 73% overall
-- `daily_paintings.py`: 89% coverage
-- `datacreator.py`: 67% coverage
+**Current Coverage**: Coverage analysis may be outdated due to test timeouts
+- `daily_paintings.py`: Extensive test coverage
+- `datacreator.py`: Comprehensive test coverage
+- `email_sender.py`: Full test coverage including integration tests
+- `poem_analyzer.py`: Complete test coverage including OpenAI integration
+- `poem_fetcher.py`: Full test coverage for poem filtering
 
 ## Running Tests
 
@@ -59,6 +69,21 @@ pytest test_daily_paintings.py::TestArgumentParsing::test_default_arguments
 pytest -n auto
 ```
 
+### Run Tests with Timeout Protection
+```bash
+# Default timeout (5 minutes per test)
+pytest
+
+# Custom timeout (2 minutes per test)
+pytest --timeout=120
+
+# Stop on first failure with timeout
+pytest --timeout=300 -x
+
+# Run specific test file with timeout
+pytest tests/test_daily_paintings.py --timeout=180
+```
+
 ## Coverage Reports
 
 ### Terminal Coverage Report
@@ -76,13 +101,14 @@ pytest --cov=. --cov-report=html
 
 ### `test_daily_paintings.py`
 Tests for the main application module:
-- **TestArgumentParsing** (6 tests): Command-line argument parsing
+- **TestArgumentParsing** (14 tests): Command-line argument parsing including email, complementary mode
 - **TestDownloadImage** (4 tests): Image download functionality
 - **TestGenerateHTMLGallery** (3 tests): HTML gallery generation
-- **TestMain** (3 tests): Main function integration
+- **TestComplementaryMode** (3 tests): Complementary art-poem matching workflow
+- **TestMain** (10 tests): Main function integration including email functionality
 - **TestFileOperations** (2 tests): File operations and JSON handling
 
-**Total**: 18 tests
+**Total**: 34 tests
 
 ### `test_datacreator.py`
 Tests for the data creator module:
@@ -95,9 +121,40 @@ Tests for the data creator module:
 - **TestAppendToExistingJson** (2 tests): JSON appending
 - **TestProcessPaintingData** (2 tests): Data processing
 - **TestGetDailyPainting** (2 tests): Daily painting retrieval
+- **TestQueryPaintingsBySubject** (6 tests): Subject-based painting queries
 - **TestQueryWikidataPaintings** (2 tests): Wikidata queries
+- **TestSitelinksFiltering** (4 tests): Fame filtering functionality
 
-**Total**: 27 tests
+**Total**: 37 tests
+
+### `test_email_sender.py`
+Tests for email functionality:
+- **TestEmailSender** (29 tests): Email configuration, validation, HTML/text generation, SMTP sending
+- **TestEmailIntegration** (4 tests): Integration tests for actual email sending (optional)
+
+**Total**: 29 tests
+
+### `test_poem_analyzer.py`
+Tests for poem analysis functionality:
+- **TestPoemAnalyzerInit** (3 tests): Initialization and theme mappings
+- **TestThemeDetection** (6 tests): Theme detection functionality
+- **TestQCodeMapping** (3 tests): Q-code mapping functionality
+- **TestConfidenceScores** (2 tests): Confidence score calculation
+- **TestEdgeCases** (4 tests): Edge cases and error handling
+- **TestMultiplePoems** (2 tests): Analysis of multiple poems
+- **TestUtilityMethods** (4 tests): Utility methods
+- **TestPerformance** (2 tests): Performance characteristics
+- **TestOpenAIIntegration** (6 tests): OpenAI API integration
+- **TestEmotionMapping** (3 tests): Emotion-aware Q-code mapping
+- **TestScoringSystem** (10 tests): Artwork scoring system
+
+**Total**: 45 tests
+
+### `test_poem_fetcher.py`
+Tests for poem fetching functionality:
+- **TestPoemFetcher** (15 tests): Word counting, filtering, and fetching with word limits
+
+**Total**: 15 tests
 
 ## Mocking Strategy
 
@@ -164,17 +221,22 @@ class TestNewFeature:
 
 1. **Limited API Testing**: Tests mock API calls rather than making real requests
 2. **File Operations**: File I/O is mocked, not actually performed
-3. **Time-dependent Tests**: Some tests may be time-sensitive
-4. **Integration Tests**: No integration tests against real APIs
+3. **Time-dependent Tests**: Some tests may be time-sensitive and can timeout
+4. **Integration Tests**: Limited integration tests against real APIs (email integration tests are optional)
+5. **Coverage Analysis**: Coverage reporting may timeout due to test execution time
+6. **OpenAI API Tests**: OpenAI integration tests require API key and may incur costs
 
 ## Future Improvements
 
-- [ ] Add integration tests with actual API calls
+- [ ] Optimize test execution time to prevent timeouts
+- [ ] Add integration tests with actual API calls (with proper rate limiting)
 - [ ] Add performance/load tests
 - [ ] Add property-based tests using Hypothesis
-- [ ] Increase coverage to 90%+
+- [ ] Improve coverage reporting reliability
 - [ ] Add test documentation for complex scenarios
 - [ ] Set up automated test runs on CI/CD
+- [ ] Add tests for new complementary mode features
+- [ ] Add tests for artwork scoring system edge cases
 
 ## Troubleshooting
 
@@ -191,9 +253,13 @@ pip install -r requirements.txt
 ```
 
 ### Tests Hang or Timeout
-- Check for unmocked network calls
-- Verify test timeouts are set appropriately
-- Run tests individually to identify the culprit
+- **Default timeout protection**: Tests automatically timeout after 5 minutes
+- **Identify hanging tests**: Use `pytest --timeout=60 -x` to stop quickly on slow tests
+- **Run tests individually**: `pytest tests/test_daily_paintings.py::TestArgumentParsing::test_default_arguments`
+- **Check for unmocked network calls**: Look for real API calls in test output
+- **OpenAI API issues**: Check if tests are making real OpenAI API calls
+- **Debug specific test**: Add `--timeout=30` to individual test runs
+- **Install timeout plugin**: `pip install pytest-timeout` if not already installed
 
 ### Coverage Report Not Generating
 ```bash
