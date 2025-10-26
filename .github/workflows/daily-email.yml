@@ -36,7 +36,7 @@ jobs:
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
         run: |
           # Send complementary artwork and poem via email
-          python daily_paintings.py --complementary --email "$EMAIL_RECIPIENT" --email-format html
+          python daily_culture_bot.py --complementary --email "$EMAIL_RECIPIENT" --email-format html
           
       - name: Upload artifacts (optional)
         if: always()
