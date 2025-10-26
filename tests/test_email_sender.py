@@ -30,9 +30,9 @@ class TestEmailSender:
         self.test_env = {
             'SMTP_HOST': 'test.smtp.com',
             'SMTP_PORT': '587',
-            'SMTP_USERNAME': 'test@example.com',
+            'SMTP_USERNAME': 'l.d.durbin@gmail.com',
             'SMTP_PASSWORD': 'testpassword',
-            'SMTP_FROM_EMAIL': 'test@example.com'
+            'SMTP_FROM_EMAIL': 'l.d.durbin@gmail.com'
         }
         
         # Mock environment variables
@@ -45,9 +45,9 @@ class TestEmailSender:
             sender = email_sender.EmailSender()
             assert sender.smtp_host == 'test.smtp.com'
             assert sender.smtp_port == 587
-            assert sender.smtp_username == 'test@example.com'
+            assert sender.smtp_username == 'l.d.durbin@gmail.com'
             assert sender.smtp_password == 'testpassword'
-            assert sender.smtp_from_email == 'test@example.com'
+            assert sender.smtp_from_email == 'l.d.durbin@gmail.com'
             assert sender.use_ssl == False  # Port 587 uses TLS
     
     def test_init_with_ssl_port(self):
@@ -292,12 +292,12 @@ class TestEmailSender:
                     'wikidata': 'http://wikidata.org/Q123'}]
         
         msg = self.email_sender.create_multipart_email(
-            'test@example.com', 'Test Subject', paintings, [], 'html'
+            'l.d.durbin@gmail.com', 'Test Subject', paintings, [], 'html'
         )
         
         assert isinstance(msg, MIMEMultipart)
-        assert msg['From'] == 'test@example.com'
-        assert msg['To'] == 'test@example.com'
+        assert msg['From'] == 'l.d.durbin@gmail.com'
+        assert msg['To'] == 'l.d.durbin@gmail.com'
         assert msg['Subject'] == 'Test Subject'
         
         # Check that HTML content is present
@@ -412,13 +412,13 @@ class TestEmailSender:
                     'wikidata': 'http://wikidata.org/Q123'}]
         
         result = self.email_sender.send_email(
-            'test@example.com', paintings, [], 'both'
+            'l.d.durbin@gmail.com', paintings, [], 'both'
         )
         
         assert result == True
         mock_smtp_class.assert_called_once_with('test.smtp.com', 587)
         mock_server.starttls.assert_called_once()
-        mock_server.login.assert_called_once_with('test@example.com', 'testpassword')
+        mock_server.login.assert_called_once_with('l.d.durbin@gmail.com', 'testpassword')
         mock_server.send_message.assert_called_once()
         mock_server.quit.assert_called_once()
     
@@ -444,7 +444,7 @@ class TestEmailSender:
         
         assert result == True
         mock_smtp_ssl_class.assert_called_once_with('test.smtp.com', 465)
-        mock_server.login.assert_called_once_with('test@example.com', 'testpassword')
+        mock_server.login.assert_called_once_with('l.d.durbin@gmail.com', 'testpassword')
         mock_server.send_message.assert_called_once()
         mock_server.quit.assert_called_once()
     
@@ -458,7 +458,7 @@ class TestEmailSender:
                     'origin': 'Country', 'image': 'http://example.com/image.jpg', 
                     'wikidata': 'http://wikidata.org/Q123'}]
         
-        result = self.email_sender.send_email('test@example.com', paintings, [])
+        result = self.email_sender.send_email('l.d.durbin@gmail.com', paintings, [])
         
         assert result == False
     
@@ -469,7 +469,7 @@ class TestEmailSender:
                     'origin': 'Country', 'image': 'http://example.com/image.jpg', 
                     'wikidata': 'http://wikidata.org/Q123'}]
         
-        result = self.email_sender.send_email('test@example.com', paintings, [], 'invalid')
+        result = self.email_sender.send_email('l.d.durbin@gmail.com', paintings, [], 'invalid')
         assert result == False
     
     def test_send_email_invalid_email_address(self):
@@ -512,7 +512,7 @@ class TestEmailIntegration:
         with patch.dict(os.environ, self.test_env):
             self.email_sender = email_sender.EmailSender()
         
-        self.test_email = os.getenv('TEST_EMAIL_ADDRESS')
+        self.test_email = 'l.d.durbin@gmail.com'
     
     def test_send_real_email_text_only(self):
         """Test sending real email with text format only."""

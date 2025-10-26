@@ -70,9 +70,9 @@ class TestArgumentParsing:
     
     def test_email_argument(self):
         """Test --email argument."""
-        with patch('sys.argv', ['daily_paintings.py', '--email', 'test@example.com']):
+        with patch('sys.argv', ['daily_paintings.py', '--email', 'l.d.durbin@gmail.com']):
             args = daily_paintings.parse_arguments()
-            assert args.email == 'test@example.com'
+            assert args.email == 'l.d.durbin@gmail.com'
     
     def test_email_format_argument(self):
         """Test --email-format argument."""
@@ -104,7 +104,7 @@ class TestArgumentParsing:
     def test_valid_email_addresses(self):
         """Test valid email address formats."""
         valid_emails = [
-            'test@example.com',
+            'l.d.durbin@gmail.com',
             'user.name@domain.co.uk',
             'test+tag@example.org',
             'user123@test-domain.com'
@@ -497,11 +497,11 @@ class TestMain:
         mock_email_sender.send_email.return_value = True
         mock_email_sender_class.return_value = mock_email_sender
         
-        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'test@example.com']):
+        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'l.d.durbin@gmail.com']):
             with patch.dict('os.environ', {
                 'SMTP_HOST': 'test.smtp.com',
                 'SMTP_PORT': '587',
-                'SMTP_USERNAME': 'test@example.com',
+                'SMTP_USERNAME': 'l.d.durbin@gmail.com',
                 'SMTP_PASSWORD': 'testpassword'
             }):
                 daily_paintings.main()
@@ -612,11 +612,11 @@ class TestMain:
         mock_email_sender.send_email.return_value = False
         mock_email_sender_class.return_value = mock_email_sender
         
-        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'test@example.com']):
+        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'l.d.durbin@gmail.com']):
             with patch.dict('os.environ', {
                 'SMTP_HOST': 'test.smtp.com',
                 'SMTP_PORT': '587',
-                'SMTP_USERNAME': 'test@example.com',
+                'SMTP_USERNAME': 'l.d.durbin@gmail.com',
                 'SMTP_PASSWORD': 'testpassword'
             }):
                 daily_paintings.main()
