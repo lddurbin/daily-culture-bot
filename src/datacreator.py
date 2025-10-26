@@ -14,6 +14,18 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 import re
 
+# Import poem_analyzer for scoring system
+try:
+    from . import poem_analyzer
+    POEM_ANALYZER_AVAILABLE = True
+except ImportError:
+    # Fallback for when running as standalone module
+    try:
+        import poem_analyzer
+        POEM_ANALYZER_AVAILABLE = True
+    except ImportError:
+        POEM_ANALYZER_AVAILABLE = False
+
 
 class PaintingDataCreator:
     def __init__(self):
@@ -688,6 +700,13 @@ class PaintingDataCreator:
                 print("No subject-based data available.")
                 return []
             
+            # Initialize analyzer once outside the loop
+            if not POEM_ANALYZER_AVAILABLE:
+                print("⚠️ Poem analyzer not available, cannot score paintings")
+                return []
+            
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
             # Process and score each painting
             scored_paintings = []
             
@@ -734,9 +753,7 @@ class PaintingDataCreator:
                         "genre_q_codes": [genre] if genre else []
                     }
                     
-                    # Score the painting
-                    from . import poem_analyzer
-                    analyzer = poem_analyzer.PoemAnalyzer()
+                    # Score the painting using the analyzer (already initialized)
                     score = analyzer.score_artwork_match(
                         poem_analysis, 
                         painting_entry["subject_q_codes"], 
