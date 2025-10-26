@@ -487,7 +487,7 @@ Return ONLY valid JSON with no additional text."""
         return [self.analyze_poem(poem) for poem in poems]
     
     def get_combined_q_codes(self, analyses: List[Dict]) -> List[str]:
-        """Get combined Q-codes from multiple poem analyses."""
+        """Get combined Q-codes from multiple poem analyses, optimized for performance."""
         all_q_codes = []
         for analysis in analyses:
             all_q_codes.extend(analysis.get("q_codes", []))
@@ -499,6 +499,11 @@ Return ONLY valid JSON with no additional text."""
             if q_code not in seen:
                 seen.add(q_code)
                 unique_q_codes.append(q_code)
+        
+        # Limit to 8 Q-codes maximum for query performance
+        if len(unique_q_codes) > 8:
+            print(f"⚠️ Limiting Q-codes from {len(unique_q_codes)} to 8 for performance")
+            unique_q_codes = unique_q_codes[:8]
         
         return unique_q_codes
     
