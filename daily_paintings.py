@@ -6,8 +6,10 @@ from datetime import date
 import datacreator
 import poem_fetcher
 import poem_analyzer
+import email_sender
 import sys
 import argparse
+import re
 
 def parse_arguments():
     """Parse command line arguments."""
@@ -21,7 +23,20 @@ def parse_arguments():
     parser.add_argument('--poem-count', type=int, default=1, help='Number of poems to fetch (default: 1)')
     parser.add_argument('--poems-only', action='store_true', help='Fetch only poems, no artwork')
     parser.add_argument('--complementary', action='store_true', help='Match artwork to poem themes (automatically enables --poems)')
-    return parser.parse_args()
+    parser.add_argument('--email', help='Email address to send content to (enables email feature)')
+    parser.add_argument('--email-format', choices=['html', 'text', 'both'], default='both', 
+                       help='Email format: html, text, or both (default: both)')
+    
+    args = parser.parse_args()
+    
+    # Validate email address if provided
+    if args.email:
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, args.email):
+            print(f"❌ Error: Invalid email address format: {args.email}")
+            sys.exit(1)
+    
+    return args
 
 def download_image(painting, headers, save_dir="."):
     """Download image for a painting and return the local path."""
@@ -675,6 +690,52 @@ def main():
         
         html_filename = generate_html_gallery(paintings, image_paths, poems, match_status, poem_analyses)
         print(f"🌐 HTML gallery saved to: {html_filename}")
+    
+    # Send email if requested
+    if args.email:
+        print(f"📧 Sending email to {args.email}...")
+        
+        try:
+            # Initialize email sender
+            email_sender_instance = email_sender.EmailSender()
+            
+            # Prepare poem analyses for complementary mode
+            poem_analyses = []
+            if args.complementary and poems:
+                poem_analyses = poem_analyzer_instance.analyze_multiple_poems(poems)
+            
+            # Download images for email if HTML format is requested
+            email_image_paths = []
+            if args.email_format in ["html", "both"] and paintings:
+                print("📥 Downloading images for email...")
+                for i, painting in enumerate(paintings):
+                    print(f"  Downloading image {i+1}/{len(paintings)}: {painting['title']}")
+                    image_path = download_image(painting, headers)
+                    email_image_paths.append(image_path)
+            
+            # Send email
+            success = email_sender_instance.send_email(
+                to_email=args.email,
+                paintings=paintings,
+                poems=poems,
+                email_format=args.email_format,
+                match_status=match_status,
+                poem_analyses=poem_analyses,
+                image_paths=email_image_paths
+            )
+            
+            if success:
+                print(f"✅ Email sent successfully to {args.email}")
+            else:
+                print(f"❌ Failed to send email to {args.email}")
+                print("💡 Check your SMTP configuration and try again")
+                
+        except ValueError as e:
+            print(f"❌ Email configuration error: {e}")
+            print("💡 Please check your environment variables (SMTP_HOST, SMTP_USERNAME, etc.)")
+        except Exception as e:
+            print(f"❌ Unexpected error sending email: {e}")
+            print("💡 Email feature will be skipped, continuing with normal workflow...")
     
     # Display artwork information
     if paintings:

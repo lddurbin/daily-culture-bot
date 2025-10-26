@@ -67,6 +67,53 @@ class TestArgumentParsing:
             args = daily_paintings.parse_arguments()
             assert args.complementary == True
             assert args.poems == True
+    
+    def test_email_argument(self):
+        """Test --email argument."""
+        with patch('sys.argv', ['daily_paintings.py', '--email', 'test@example.com']):
+            args = daily_paintings.parse_arguments()
+            assert args.email == 'test@example.com'
+    
+    def test_email_format_argument(self):
+        """Test --email-format argument."""
+        with patch('sys.argv', ['daily_paintings.py', '--email-format', 'html']):
+            args = daily_paintings.parse_arguments()
+            assert args.email_format == 'html'
+    
+    def test_email_format_default(self):
+        """Test --email-format default value."""
+        with patch('sys.argv', ['daily_paintings.py']):
+            args = daily_paintings.parse_arguments()
+            assert args.email_format == 'both'
+    
+    def test_email_format_choices(self):
+        """Test --email-format valid choices."""
+        valid_formats = ['html', 'text', 'both']
+        for format_choice in valid_formats:
+            with patch('sys.argv', ['daily_paintings.py', '--email-format', format_choice]):
+                args = daily_paintings.parse_arguments()
+                assert args.email_format == format_choice
+    
+    def test_invalid_email_address(self):
+        """Test invalid email address."""
+        with patch('sys.argv', ['daily_paintings.py', '--email', 'invalid-email']):
+            with patch('sys.exit') as mock_exit:
+                daily_paintings.parse_arguments()
+                mock_exit.assert_called_once_with(1)
+    
+    def test_valid_email_addresses(self):
+        """Test valid email address formats."""
+        valid_emails = [
+            'test@example.com',
+            'user.name@domain.co.uk',
+            'test+tag@example.org',
+            'user123@test-domain.com'
+        ]
+        
+        for email in valid_emails:
+            with patch('sys.argv', ['daily_paintings.py', '--email', email]):
+                args = daily_paintings.parse_arguments()
+                assert args.email == email
 
 
 class TestDownloadImage:
@@ -422,6 +469,190 @@ class TestMain:
         with patch('sys.argv', ['daily_paintings.py', '--count', '1']):
             with pytest.raises(ValueError, match="Failed to fetch paintings"):
                 daily_paintings.main()
+    
+    @patch('daily_paintings.email_sender.EmailSender')
+    @patch('daily_paintings.download_image')
+    @patch('daily_paintings.datacreator.PaintingDataCreator')
+    def test_main_with_email_flag(self, mock_creator_class, mock_download, mock_email_sender_class):
+        """Test main function with --email flag."""
+        # Setup mocks
+        mock_creator = Mock()
+        mock_creator.create_sample_paintings.return_value = [
+            {
+                'title': 'Sample Painting',
+                'artist': 'Sample Artist',
+                'year': '2020',
+                'style': 'Modern',
+                'medium': 'Oil',
+                'museum': 'Museum',
+                'origin': 'Country',
+                'image': 'http://example.com/image.jpg',
+                'wikidata': 'http://wikidata.org/Q1'
+            }
+        ]
+        mock_creator_class.return_value = mock_creator
+        mock_download.return_value = './test.jpg'
+        
+        mock_email_sender = Mock()
+        mock_email_sender.send_email.return_value = True
+        mock_email_sender_class.return_value = mock_email_sender
+        
+        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'test@example.com']):
+            with patch.dict('os.environ', {
+                'SMTP_HOST': 'test.smtp.com',
+                'SMTP_PORT': '587',
+                'SMTP_USERNAME': 'test@example.com',
+                'SMTP_PASSWORD': 'testpassword'
+            }):
+                daily_paintings.main()
+        
+        mock_creator.create_sample_paintings.assert_called_once_with(1)
+        mock_email_sender.send_email.assert_called_once()
+    
+    @patch('daily_paintings.email_sender.EmailSender')
+    @patch('daily_paintings.download_image')
+    @patch('daily_paintings.datacreator.PaintingDataCreator')
+    def test_main_with_email_html_format(self, mock_creator_class, mock_download, mock_email_sender_class):
+        """Test main function with --email and --email-format html."""
+        # Setup mocks
+        mock_creator = Mock()
+        mock_creator.create_sample_paintings.return_value = [
+            {
+                'title': 'Sample Painting',
+                'artist': 'Sample Artist',
+                'year': '2020',
+                'style': 'Modern',
+                'medium': 'Oil',
+                'museum': 'Museum',
+                'origin': 'Country',
+                'image': 'http://example.com/image.jpg',
+                'wikidata': 'http://wikidata.org/Q1'
+            }
+        ]
+        mock_creator_class.return_value = mock_creator
+        mock_download.return_value = './test.jpg'
+        
+        mock_email_sender = Mock()
+        mock_email_sender.send_email.return_value = True
+        mock_email_sender_class.return_value = mock_email_sender
+        
+        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'test@example.com', '--email-format', 'html']):
+            with patch.dict('os.environ', {
+                'SMTP_HOST': 'test.smtp.com',
+                'SMTP_PORT': '587',
+                'SMTP_USERNAME': 'test@example.com',
+                'SMTP_PASSWORD': 'testpassword'
+            }):
+                daily_paintings.main()
+        
+        mock_creator.create_sample_paintings.assert_called_once_with(1)
+        mock_download.assert_called_once()  # Should download images for HTML email
+        mock_email_sender.send_email.assert_called_once()
+    
+    @patch('daily_paintings.email_sender.EmailSender')
+    @patch('daily_paintings.datacreator.PaintingDataCreator')
+    def test_main_with_email_text_format(self, mock_creator_class, mock_email_sender_class):
+        """Test main function with --email and --email-format text."""
+        # Setup mocks
+        mock_creator = Mock()
+        mock_creator.create_sample_paintings.return_value = [
+            {
+                'title': 'Sample Painting',
+                'artist': 'Sample Artist',
+                'year': '2020',
+                'style': 'Modern',
+                'medium': 'Oil',
+                'museum': 'Museum',
+                'origin': 'Country',
+                'image': 'http://example.com/image.jpg',
+                'wikidata': 'http://wikidata.org/Q1'
+            }
+        ]
+        mock_creator_class.return_value = mock_creator
+        
+        mock_email_sender = Mock()
+        mock_email_sender.send_email.return_value = True
+        mock_email_sender_class.return_value = mock_email_sender
+        
+        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'test@example.com', '--email-format', 'text']):
+            with patch.dict('os.environ', {
+                'SMTP_HOST': 'test.smtp.com',
+                'SMTP_PORT': '587',
+                'SMTP_USERNAME': 'test@example.com',
+                'SMTP_PASSWORD': 'testpassword'
+            }):
+                daily_paintings.main()
+        
+        mock_creator.create_sample_paintings.assert_called_once_with(1)
+        # Should not download images for text-only email
+        mock_email_sender.send_email.assert_called_once()
+    
+    @patch('daily_paintings.email_sender.EmailSender')
+    @patch('daily_paintings.datacreator.PaintingDataCreator')
+    def test_main_with_email_failure(self, mock_creator_class, mock_email_sender_class):
+        """Test main function with email sending failure."""
+        # Setup mocks
+        mock_creator = Mock()
+        mock_creator.create_sample_paintings.return_value = [
+            {
+                'title': 'Sample Painting',
+                'artist': 'Sample Artist',
+                'year': '2020',
+                'style': 'Modern',
+                'medium': 'Oil',
+                'museum': 'Museum',
+                'origin': 'Country',
+                'image': 'http://example.com/image.jpg',
+                'wikidata': 'http://wikidata.org/Q1'
+            }
+        ]
+        mock_creator_class.return_value = mock_creator
+        
+        mock_email_sender = Mock()
+        mock_email_sender.send_email.return_value = False
+        mock_email_sender_class.return_value = mock_email_sender
+        
+        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'test@example.com']):
+            with patch.dict('os.environ', {
+                'SMTP_HOST': 'test.smtp.com',
+                'SMTP_PORT': '587',
+                'SMTP_USERNAME': 'test@example.com',
+                'SMTP_PASSWORD': 'testpassword'
+            }):
+                daily_paintings.main()
+        
+        mock_creator.create_sample_paintings.assert_called_once_with(1)
+        mock_email_sender.send_email.assert_called_once()
+    
+    @patch('daily_paintings.email_sender.EmailSender')
+    @patch('daily_paintings.datacreator.PaintingDataCreator')
+    def test_main_with_email_configuration_error(self, mock_creator_class, mock_email_sender_class):
+        """Test main function with email configuration error."""
+        # Setup mocks
+        mock_creator = Mock()
+        mock_creator.create_sample_paintings.return_value = [
+            {
+                'title': 'Sample Painting',
+                'artist': 'Sample Artist',
+                'year': '2020',
+                'style': 'Modern',
+                'medium': 'Oil',
+                'museum': 'Museum',
+                'origin': 'Country',
+                'image': 'http://example.com/image.jpg',
+                'wikidata': 'http://wikidata.org/Q1'
+            }
+        ]
+        mock_creator_class.return_value = mock_creator
+        
+        # Mock EmailSender to raise ValueError (missing config)
+        mock_email_sender_class.side_effect = ValueError("Missing required environment variables")
+        
+        with patch('sys.argv', ['daily_paintings.py', '--fast', '--email', 'test@example.com']):
+            daily_paintings.main()
+        
+        mock_creator.create_sample_paintings.assert_called_once_with(1)
+        mock_email_sender_class.assert_called_once()
 
 
 class TestFileOperations:
