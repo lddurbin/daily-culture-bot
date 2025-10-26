@@ -5,6 +5,7 @@ import tempfile
 from datetime import date
 import datacreator
 import poem_fetcher
+import poem_analyzer
 import sys
 import argparse
 
@@ -19,6 +20,7 @@ def parse_arguments():
     parser.add_argument('--poems', '-p', action='store_true', help='Also fetch random poems')
     parser.add_argument('--poem-count', type=int, default=1, help='Number of poems to fetch (default: 1)')
     parser.add_argument('--poems-only', action='store_true', help='Fetch only poems, no artwork')
+    parser.add_argument('--complementary', action='store_true', help='Match artwork to poem themes (automatically enables --poems)')
     return parser.parse_args()
 
 def download_image(painting, headers, save_dir="."):
@@ -45,7 +47,7 @@ def download_image(painting, headers, save_dir="."):
         print(f"⚠️ Warning: Could not download image for {painting['title']}: {e}")
         return None
 
-def generate_html_gallery(paintings, image_paths, poems=None, output_filename="artwork_gallery.html"):
+def generate_html_gallery(paintings, image_paths, poems=None, match_status=None, poem_analyses=None, output_filename="artwork_gallery.html"):
     """Generate an HTML gallery page for the artworks."""
     
     html_content = f"""<!DOCTYPE html>
@@ -353,6 +355,43 @@ def generate_html_gallery(paintings, image_paths, poems=None, output_filename="a
             font-style: italic;
         }}
         
+        .poem-themes {{
+            background: #2a2a2a;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+            color: #667eea;
+            font-weight: 500;
+            border-left: 3px solid #667eea;
+        }}
+        
+        /* Match Status Badges */
+        .match-badge {{
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }}
+        
+        .match-badge.matched {{
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }}
+        
+        .match-badge.fallback {{
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+        }}
+        
+        .match-badge.sample {{
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+        }}
+        
         @media (max-width: 768px) {{
             .poems-container {{
                 grid-template-columns: 1fr;
@@ -381,13 +420,23 @@ def generate_html_gallery(paintings, image_paths, poems=None, output_filename="a
         image_path = image_paths[i] if i < len(image_paths) and image_paths[i] else None
         image_src = f"./{os.path.basename(image_path)}" if image_path else painting['image']
         
+        # Get match status and themes for this artwork
+        status = match_status[i] if match_status and i < len(match_status) else "unknown"
+        status_badge = ""
+        if status == "matched":
+            status_badge = '<span class="match-badge matched">🎯 Matched to Poem</span>'
+        elif status == "fallback":
+            status_badge = '<span class="match-badge fallback">🎲 Random Selection</span>'
+        elif status == "sample":
+            status_badge = '<span class="match-badge sample">⚡ Sample Data</span>'
+        
         html_content += f"""
             <div class="artwork">
                 <div class="artwork-image">
                     <img src="{image_src}" alt="{painting['title']}" loading="lazy">
                 </div>
                 <div class="artwork-info">
-                    <h2 class="artwork-title">{painting['title']}</h2>
+                    <h2 class="artwork-title">{painting['title']} {status_badge}</h2>
                     <p class="artwork-artist">by {painting['artist']} ({painting['year'] or 'Unknown year'})</p>
                     
                     <div class="artwork-details">
@@ -427,11 +476,21 @@ def generate_html_gallery(paintings, image_paths, poems=None, output_filename="a
             <h2 class="poems-title">📝 Daily Poems</h2>
             <div class="poems-container">"""
         
-        for poem in poems:
+        for i, poem in enumerate(poems):
+            # Add theme information if available
+            theme_info = ""
+            if poem_analyses and i < len(poem_analyses):
+                analysis = poem_analyses[i]
+                if analysis.get("has_themes"):
+                    themes = analysis.get("themes", [])
+                    if themes:
+                        theme_info = f'<div class="poem-themes">🎭 Themes: {", ".join(themes)}</div>'
+            
             html_content += f"""
                 <div class="poem-card">
                     <h3 class="poem-title">{poem['title']}</h3>
                     <p class="poem-author">by {poem['author']}</p>
+                    {theme_info}
                     <div class="poem-text">
                         <pre>{poem['text']}</pre>
                     </div>
@@ -462,35 +521,105 @@ def generate_html_gallery(paintings, image_paths, poems=None, output_filename="a
 def main():
     args = parse_arguments()
     
+    # Validate complementary mode constraints
+    if args.complementary and args.poems_only:
+        print("❌ Error: --complementary and --poems-only cannot be used together")
+        print("💡 Use --complementary to match artwork to poems, or --poems-only for poems only")
+        return
+    
+    # Auto-enable poems when using complementary mode
+    if args.complementary and not args.poems:
+        args.poems = True
+        print("📝 Complementary mode automatically enabled poem fetching")
+    
     # Initialize the data creators
     creator = datacreator.PaintingDataCreator()
     poem_fetcher_instance = poem_fetcher.PoemFetcher()
+    poem_analyzer_instance = poem_analyzer.PoemAnalyzer()
     
     paintings = []
     poems = []
+    match_status = []  # Track which paintings were matched vs fallback
     
-    # Fetch paintings unless poems-only mode
-    if not args.poems_only:
-        print(f"🎨 Fetching {args.count} painting{'s' if args.count != 1 else ''}...")
+    # Handle complementary mode (poems first, then match artwork)
+    if args.complementary:
+        print(f"🎭 Complementary mode: Fetching poems first, then matching artwork...")
         
-        # Get multiple paintings
-        if args.fast:
-            print("⚡ Fast mode: Using sample data only...")
-            paintings = creator.create_sample_paintings(args.count)
-        else:
-            paintings = creator.fetch_paintings(count=args.count)
-        
-        if not paintings:
-            print("❌ Could not fetch paintings from Wikidata.")
-            print("💡 Try again later or check your internet connection.")
-            print("💡 You can also use --fast flag to use sample data if needed.")
-            raise ValueError("Failed to fetch paintings from Wikidata API")
-        
-        print(f"✅ Selected {len(paintings)} painting{'s' if len(paintings) != 1 else ''}")
-    
-    # Fetch poems if requested
-    if args.poems or args.poems_only:
+        # Fetch poems first
         print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''}...")
+        
+        if args.fast:
+            print("⚡ Fast mode: Using sample poem data...")
+            poems = poem_fetcher_instance.create_sample_poems(args.poem_count)
+        else:
+            poems = poem_fetcher_instance.fetch_random_poems(args.poem_count)
+        
+        if not poems:
+            print("❌ Could not fetch poems from PoetryDB.")
+            print("💡 Try again later or check your internet connection.")
+            raise ValueError("Failed to fetch poems from PoetryDB API")
+        
+        print(f"✅ Selected {len(poems)} poem{'s' if len(poems) != 1 else ''}")
+        
+        # Analyze poems and fetch matching artwork
+        print("🔍 Analyzing poem themes...")
+        poem_analyses = poem_analyzer_instance.analyze_multiple_poems(poems)
+        
+        # Get combined Q-codes from all poems
+        all_q_codes = poem_analyzer_instance.get_combined_q_codes(poem_analyses)
+        
+        if all_q_codes:
+            print(f"🎨 Searching for artwork matching themes: {all_q_codes}")
+            
+            if args.fast:
+                print("⚡ Fast mode: Using sample artwork data...")
+                paintings = creator.create_sample_paintings(args.count)
+                match_status = ["sample"] * len(paintings)
+            else:
+                # Try to fetch matching artwork
+                paintings = creator.fetch_paintings_by_subject(all_q_codes, count=args.count)
+                
+                if paintings:
+                    match_status = ["matched"] * len(paintings)
+                    print(f"✅ Found {len(paintings)} artwork{'s' if len(paintings) != 1 else ''} matching poem themes")
+                else:
+                    print("⚠️ No artwork found matching poem themes, using random artwork")
+                    paintings = creator.fetch_paintings(count=args.count)
+                    match_status = ["fallback"] * len(paintings)
+        else:
+            print("⚠️ No themes detected in poems, using random artwork")
+            if args.fast:
+                paintings = creator.create_sample_paintings(args.count)
+                match_status = ["sample"] * len(paintings)
+            else:
+                paintings = creator.fetch_paintings(count=args.count)
+                match_status = ["fallback"] * len(paintings)
+    
+    # Regular mode (paintings first, then poems if requested)
+    else:
+        # Fetch paintings unless poems-only mode
+        if not args.poems_only:
+            print(f"🎨 Fetching {args.count} painting{'s' if args.count != 1 else ''}...")
+            
+            # Get multiple paintings
+            if args.fast:
+                print("⚡ Fast mode: Using sample data only...")
+                paintings = creator.create_sample_paintings(args.count)
+            else:
+                paintings = creator.fetch_paintings(count=args.count)
+            
+            if not paintings:
+                print("❌ Could not fetch paintings from Wikidata.")
+                print("💡 Try again later or check your internet connection.")
+                print("💡 You can also use --fast flag to use sample data if needed.")
+                raise ValueError("Failed to fetch paintings from Wikidata API")
+            
+            print(f"✅ Selected {len(paintings)} painting{'s' if len(paintings) != 1 else ''}")
+            match_status = ["random"] * len(paintings)
+        
+        # Fetch poems if requested
+        if args.poems or args.poems_only:
+            print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''}...")
         
         if args.fast:
             print("⚡ Fast mode: Using sample poem data...")
@@ -539,7 +668,12 @@ def main():
     
     # Generate HTML gallery if requested
     if args.html:
-        html_filename = generate_html_gallery(paintings, image_paths, poems)
+        # Prepare additional data for complementary mode
+        poem_analyses = []
+        if args.complementary and poems:
+            poem_analyses = poem_analyzer_instance.analyze_multiple_poems(poems)
+        
+        html_filename = generate_html_gallery(paintings, image_paths, poems, match_status, poem_analyses)
         print(f"🌐 HTML gallery saved to: {html_filename}")
     
     # Display artwork information
