@@ -452,19 +452,38 @@ class EmailSender:
         
         # Add image attachments for HTML emails
         if email_format in ["html", "both"] and image_paths:
-            for i, image_path in enumerate(image_paths):
-                if image_path and os.path.exists(image_path):
-                    try:
-                        with open(image_path, 'rb') as f:
-                            image_data = f.read()
-                        
-                        # Create image attachment
-                        image_part = MIMEImage(image_data)
-                        image_part.add_header('Content-ID', f'<artwork_{i}>')
-                        image_part.add_header('Content-Disposition', 'inline', filename=f'artwork_{i}.jpg')
-                        msg.attach(image_part)
-                    except Exception as e:
-                        print(f"⚠️ Warning: Could not attach image {image_path}: {e}")
+            try:
+                from PIL import Image
+                from io import BytesIO
+                
+                for i, image_path in enumerate(image_paths):
+                    if image_path and os.path.exists(image_path):
+                        try:
+                            # Resize image to max 800px width to keep email size reasonable
+                            with Image.open(image_path) as img:
+                                # Calculate new size maintaining aspect ratio
+                                max_size = 800
+                                if img.width > max_size:
+                                    ratio = max_size / img.width
+                                    new_height = int(img.height * ratio)
+                                    img = img.resize((max_size, new_height), Image.Resampling.LANCZOS)
+                                
+                                # Save to bytes buffer
+                                buffer = BytesIO()
+                                img.save(buffer, format='JPEG', quality=85, optimize=True)
+                                buffer.seek(0)
+                                image_data = buffer.read()
+                            
+                            # Create image attachment
+                            image_part = MIMEImage(image_data)
+                            image_part.add_header('Content-ID', f'<artwork_{i}>')
+                            image_part.add_header('Content-Disposition', 'inline', filename=f'artwork_{i}.jpg')
+                            msg.attach(image_part)
+                        except Exception as e:
+                            print(f"⚠️ Warning: Could not attach image {image_path}: {e}")
+            except ImportError:
+                # Pillow not available, skip image attachments
+                print("⚠️ Warning: Pillow not available, skipping image attachments to reduce email size")
         
         return msg
     
