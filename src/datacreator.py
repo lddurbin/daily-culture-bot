@@ -28,7 +28,7 @@ except ImportError:
 
 
 class PaintingDataCreator:
-    def __init__(self):
+    def __init__(self, query_timeout: int = 60):
         self.wikidata_endpoint = "https://query.wikidata.org/sparql"
         self.wikipedia_api = "https://en.wikipedia.org/api/rest_v1/page/summary/"
         self.commons_api = "https://commons.wikimedia.org/w/api.php"
@@ -38,6 +38,11 @@ class PaintingDataCreator:
         self.session.headers.update({
             'User-Agent': 'PaintingDataCreator/1.0 (https://github.com/ugurelveren/daily-painting-bot)'
         })
+        
+        # Simple query cache to avoid repeated expensive queries
+        self.query_cache = {}
+        self.cache_max_size = 50  # Limit cache size
+        self.query_timeout = query_timeout  # Configurable timeout
         
         # Style mappings for better categorization
         self.style_mappings = {
@@ -60,9 +65,30 @@ class PaintingDataCreator:
             "Q12124693": "Regionalism"
         }
 
-    def query_paintings_by_subject(self, q_codes: List[str], limit: int = 50, offset: int = 0, random_order: bool = True, genres: List[str] = None, max_sitelinks: int = 20) -> List[Dict]:
+    def _get_cache_key(self, query_type: str, **params) -> str:
+        """Generate a cache key for query parameters."""
+        # Create a deterministic key from parameters
+        key_parts = [query_type]
+        for k, v in sorted(params.items()):
+            if isinstance(v, list):
+                key_parts.append(f"{k}:{','.join(sorted(v))}")
+            else:
+                key_parts.append(f"{k}:{v}")
+        return "|".join(key_parts)
+
+    def _manage_cache_size(self):
+        """Remove oldest entries if cache is too large."""
+        if len(self.query_cache) > self.cache_max_size:
+            # Remove oldest 25% of entries
+            items_to_remove = len(self.query_cache) // 4
+            oldest_keys = list(self.query_cache.keys())[:items_to_remove]
+            for key in oldest_keys:
+                del self.query_cache[key]
+
+    def query_artwork_by_subject(self, q_codes: List[str], limit: int = 50, offset: int = 0, random_order: bool = True, genres: List[str] = None, max_sitelinks: int = 20, artwork_types: List[str] = None) -> List[Dict]:
         """
-        Query Wikidata for paintings matching specific subjects/themes and genres.
+        Query Wikidata for visual artwork (paintings, photographs, sculptures, etc.) matching specific subjects/themes and genres.
+        Optimized for better performance and reduced timeouts.
         
         Args:
             q_codes: List of Wikidata Q-codes for subjects to match
@@ -71,6 +97,7 @@ class PaintingDataCreator:
             random_order: Whether to randomize the order of results
             genres: Optional list of genre Q-codes to filter by
             max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
+            artwork_types: List of artwork type Q-codes (default: paintings, photos, sculptures)
             
         Returns:
             List of raw Wikidata results
@@ -78,68 +105,87 @@ class PaintingDataCreator:
         if not q_codes:
             return []
         
-        # Create Q-code filter clause
-        q_code_filters = " || ".join([f"?subject = wd:{q_code}" for q_code in q_codes])
+        # Check cache first
+        cache_key = self._get_cache_key("artwork_by_subject", 
+                                      q_codes=q_codes, limit=limit, offset=offset, 
+                                      max_sitelinks=max_sitelinks, artwork_types=artwork_types)
         
-        # Add genre filtering if provided
-        genre_filter = ""
-        if genres:
-            genre_filters = " || ".join([f"?genre = wd:{genre}" for genre in genres])
-            genre_filter = f"""UNION {{
-            ?painting wdt:P136 ?genre .   # genre
-            FILTER({genre_filters})
-          }}"""
+        if cache_key in self.query_cache:
+            print("📋 Using cached query result")
+            return self.query_cache[cache_key]
         
-        # Choose ordering
-        if random_order:
-            order_clause = "ORDER BY RAND()"
-        else:
-            order_clause = "ORDER BY DESC(?year)"
+        # Limit Q-codes to prevent overly complex queries
+        if len(q_codes) > 10:
+            print(f"⚠️ Too many Q-codes ({len(q_codes)}), limiting to first 10 for performance")
+            q_codes = q_codes[:10]
         
+        # Default artwork types if not specified
+        if artwork_types is None:
+            artwork_types = [
+                "Q3305213",  # painting
+                "Q125191",   # photograph
+                "Q860861",   # sculpture
+            ]  # Reduced to most common types for better performance
+        
+        # Create simplified Q-code filter clause
+        q_code_list = ', '.join([f'wd:{q_code}' for q_code in q_codes])
+        artwork_type_list = ', '.join([f'wd:{art_type}' for art_type in artwork_types])
+        
+        # Simplified query structure for better performance
         sparql_query = f"""
-        SELECT ?painting ?image ?sitelinks ?subject ?genre WHERE {{
-          ?painting wdt:P31 wd:Q3305213 .  # Instance of painting
-          ?painting wdt:P18 ?image .        # Has image
-          ?painting wikibase:sitelinks ?sitelinks .  # Wikipedia sitelinks count
+        SELECT ?artwork ?image ?sitelinks WHERE {{
+          ?artwork wdt:P31 ?artworkType .
+          FILTER(?artworkType IN ({artwork_type_list}))
           
-          # Filter out paintings with excessive Wikipedia coverage (fame filter)
+          ?artwork wdt:P18 ?image .
+          ?artwork wikibase:sitelinks ?sitelinks .
           FILTER(?sitelinks < {max_sitelinks})
           
-          # Match by subject/depicts properties
-          {{
-            ?painting wdt:P180 ?subject .    # depicts
-            FILTER({q_code_filters})
-          }} UNION {{
-            ?painting wdt:P921 ?subject .   # main subject
-            FILTER({q_code_filters})
-          }}{genre_filter}
-          
-          # Get genre information
-          OPTIONAL {{ ?painting wdt:P136 ?genre . }}
+          # Match by subject/depicts properties (simplified)
+          ?artwork wdt:P180 ?subject .
+          FILTER(?subject IN ({q_code_list}))
         }}
-        {order_clause}
+        ORDER BY RAND()
         LIMIT {limit}
         OFFSET {offset}
         """
         
-        try:
-            response = self.session.get(
-                self.wikidata_endpoint,
-                params={'query': sparql_query, 'format': 'json'},
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            return data['results']['bindings']
-            
-        except requests.RequestException as e:
-            print(f"Error querying Wikidata for subjects: {e}")
-            return []
+        # Use longer timeout for complex queries
+        timeout = self.query_timeout if len(q_codes) > 5 else min(30, self.query_timeout)
+        max_retries = 2  # Reduced retries for faster fallback
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(
+                    self.wikidata_endpoint,
+                    params={'query': sparql_query, 'format': 'json'},
+                    timeout=timeout
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                results = data['results']['bindings']
+                
+                # Cache the results
+                self.query_cache[cache_key] = results
+                self._manage_cache_size()
+                
+                return results
+                
+            except requests.RequestException as e:
+                if attempt < max_retries - 1:
+                    delay = 2 ** attempt  # Exponential backoff
+                    print(f"⚠️ Wikidata query attempt {attempt + 1} failed: {e}")
+                    print(f"🔄 Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                else:
+                    print(f"❌ Error querying Wikidata for subjects after {max_retries} attempts: {e}")
+                    return []
 
     def query_wikidata_paintings(self, limit: int = 50, offset: int = 0, filter_type: str = "both", random_order: bool = False, max_sitelinks: int = 20) -> List[Dict]:
         """
         Query Wikidata for paintings with detailed information.
+        Optimized for better performance and reduced timeouts.
         
         Args:
             limit: Number of results to return
@@ -149,53 +195,17 @@ class PaintingDataCreator:
             max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
         """
         
-        if filter_type == "license":
-            # Pure license-based filter
-            filter_clause = """
-            # Get copyright and license information
-            OPTIONAL { ?painting wdt:P6216 ?copyright }  # Copyright status of the work
-            OPTIONAL { ?image wdt:P275 ?license }        # License of the image file
-            
-            # PURE LICENSE FILTER - Only explicit public domain or compatible licenses
-            FILTER(
-              # Explicit public domain status
-              ?copyright = wd:Q19652 ||                     # Public domain
-              ?copyright = wd:Q15687061 ||                  # Public domain in the United States
-              ?copyright = wd:Q19652668 ||                  # Public domain due to expiration
-              
-              # Creative Commons licenses (open/compatible)
-              ?license = wd:Q6938433 ||                     # CC0 (public domain dedication)
-              ?license = wd:Q14947546 ||                    # CC BY (attribution required)
-              ?license = wd:Q18199165 ||                    # CC BY-SA (attribution + share-alike)
-              ?license = wd:Q19113751 ||                    # CC BY 2.0
-              ?license = wd:Q18810333 ||                    # CC BY 3.0
-              ?license = wd:Q20007257 ||                    # CC BY 4.0
-              ?license = wd:Q27016754 ||                    # CC BY-SA 2.0
-              ?license = wd:Q14946043 ||                    # CC BY-SA 3.0
-              ?license = wd:Q18810341                       # CC BY-SA 4.0
-            )
-            """
-            
-        elif filter_type == "age":
-            # Simplified age-based filter
-            filter_clause = """
-            # Artist death date filter for public domain (died before 1953 for 70+ year rule)
-            ?artist wdt:P570 ?deathDate .
-            FILTER(YEAR(?deathDate) < 1953)
-            """
-            
-        else:  # filter_type == "both"
-            # Minimal filter - just paintings with images
-            filter_clause = """
-            # Just ensure we have paintings with images
-            """
-
-        # Choose ordering - random or by year
-        if random_order:
-            order_clause = "ORDER BY RAND()"
-        else:
-            order_clause = "ORDER BY DESC(?year)"
-
+        # Check cache first
+        cache_key = self._get_cache_key("wikidata_paintings", 
+                                      limit=limit, offset=offset, 
+                                      max_sitelinks=max_sitelinks)
+        
+        if cache_key in self.query_cache:
+            print("📋 Using cached painting query result")
+            return self.query_cache[cache_key]
+        
+        # Simplified query structure for better performance
+        # Remove complex license filtering that causes timeouts
         sparql_query = f"""
         SELECT ?painting ?image ?sitelinks WHERE {{
           ?painting wdt:P31 wd:Q3305213 .  # Instance of painting
@@ -204,28 +214,43 @@ class PaintingDataCreator:
           
           # Filter out paintings with excessive Wikipedia coverage (fame filter)
           FILTER(?sitelinks < {max_sitelinks})
-          
-          {filter_clause}
         }}
-        {order_clause}
+        ORDER BY RAND()
         LIMIT {limit}
         OFFSET {offset}
         """
         
-        try:
-            response = self.session.get(
-                self.wikidata_endpoint,
-                params={'query': sparql_query, 'format': 'json'},
-                timeout=30  # Reduced from 60 to 30 seconds for faster fallback
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            return data['results']['bindings']
-            
-        except requests.RequestException as e:
-            print(f"Error querying Wikidata: {e}")
-            return []
+        # Use longer timeout for better reliability
+        timeout = self.query_timeout
+        max_retries = 2  # Reduced retries for faster fallback
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(
+                    self.wikidata_endpoint,
+                    params={'query': sparql_query, 'format': 'json'},
+                    timeout=timeout
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                results = data['results']['bindings']
+                
+                # Cache the results
+                self.query_cache[cache_key] = results
+                self._manage_cache_size()
+                
+                return results
+                
+            except requests.RequestException as e:
+                if attempt < max_retries - 1:
+                    delay = 2 ** attempt  # Exponential backoff
+                    print(f"⚠️ Wikidata query attempt {attempt + 1} failed: {e}")
+                    print(f"🔄 Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                else:
+                    print(f"❌ Error querying Wikidata after {max_retries} attempts: {e}")
+                    return []
 
     def get_wikipedia_summary(self, title: str) -> Optional[str]:
         """
@@ -580,209 +605,267 @@ class PaintingDataCreator:
         # Return only the requested count
         return all_paintings[:count]
 
-    def fetch_paintings_by_subject(self, q_codes: List[str], count: int = 1, genres: List[str] = None, use_sample_on_error: bool = True, max_sitelinks: int = 20) -> List[Dict]:
+    def fetch_artwork_by_subject(self, q_codes: List[str], count: int = 1, genres: List[str] = None, use_sample_on_error: bool = True, max_sitelinks: int = 20, artwork_types: List[str] = None) -> List[Dict]:
         """
-        Fetch paintings matching specific subjects/themes and genres from Wikidata.
+        Fetch visual artwork matching specific subjects/themes and genres from Wikidata.
+        Uses progressive fallback: specific artwork types → broader types → random artwork.
         
         Args:
             q_codes: List of Wikidata Q-codes for subjects to match
-            count: Number of paintings to fetch
+            count: Number of artworks to fetch
             genres: Optional list of genre Q-codes to filter by
             use_sample_on_error: Whether to use sample data if API fails
             max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
+            artwork_types: List of artwork type Q-codes (default: paintings, photos, sculptures)
             
         Returns:
-            List of processed painting dictionaries
+            List of processed artwork dictionaries
         """
         if not q_codes:
             print("No Q-codes provided for subject-based search")
             return []
         
-        print(f"Searching for paintings matching subjects: {q_codes}")
+        print(f"Searching for artwork matching subjects: {q_codes}")
         if genres:
             print(f"With genre filtering: {genres}")
         
-        all_paintings = []
-        batch_size = 10
+        # Progressive fallback strategy
+        fallback_strategies = [
+            {
+                "name": "specific artwork types",
+                "artwork_types": artwork_types or ["Q3305213", "Q125191", "Q860861"],  # paintings, photos, sculptures
+                "max_sitelinks": max_sitelinks
+            },
+            {
+                "name": "broader artwork types", 
+                "artwork_types": ["Q3305213", "Q125191", "Q860861", "Q42973", "Q93184", "Q11661"],  # + drawings, prints, murals
+                "max_sitelinks": max_sitelinks + 10  # Slightly more famous
+            },
+            {
+                "name": "all visual art",
+                "artwork_types": ["Q3305213", "Q125191", "Q860861", "Q42973", "Q93184", "Q11661", "Q11060274", "Q1044167"],  # + digital art, illustrations
+                "max_sitelinks": max_sitelinks + 20  # Even more famous
+            },
+            {
+                "name": "random artwork",
+                "artwork_types": None,  # Will use regular random fetch
+                "max_sitelinks": max_sitelinks
+            }
+        ]
         
-        # Add random offset for variety
-        max_offset = min(200, count * 3)  # Smaller range for subject-based search
-        random_offset = random.randint(0, max_offset)
-        print(f"Using random starting offset: {random_offset}")
-        
-        offset = random_offset
-        max_retries = 2
-        
-        for retry in range(max_retries):
+        for strategy in fallback_strategies:
+            print(f"🎨 Trying {strategy['name']}...")
+            
             try:
-                while len(all_paintings) < count:
-                    print(f"Fetching subject-based batch starting at offset {offset}...")
-                    
-                    raw_data = self.query_paintings_by_subject(
-                        q_codes=q_codes,
-                        limit=batch_size, 
-                        offset=offset, 
-                        random_order=True,
-                        genres=genres,
-                        max_sitelinks=max_sitelinks
-                    )
-                    
-                    if not raw_data:
-                        print("No more subject-based data available.")
-                        break
-                    
-                    processed_batch = self.process_painting_data(raw_data)
-                    all_paintings.extend(processed_batch)
-                    
-                    offset += batch_size
-                    
-                    # Shorter delay for subject-based queries
-                    time.sleep(1)
-                    
-                    # Break if we've fetched enough
-                    if len(processed_batch) < batch_size // 2:
-                        break
+                if strategy["artwork_types"] is None:
+                    # Use regular random fetch as final fallback
+                    print("🔄 Falling back to random artwork...")
+                    return self.fetch_paintings(count=count, max_sitelinks=strategy["max_sitelinks"])
                 
-                # If we got some paintings, break the retry loop
-                if all_paintings:
-                    break
-                    
+                # Try subject-based search with current strategy
+                raw_data = self.query_artwork_by_subject(
+                    q_codes=q_codes,
+                    limit=count * 5,  # Fetch more to have options
+                    offset=0,
+                    random_order=True,
+                    genres=genres,
+                    max_sitelinks=strategy["max_sitelinks"],
+                    artwork_types=strategy["artwork_types"]
+                )
+                
+                if raw_data:
+                    print(f"✅ Found {len(raw_data)} artworks with {strategy['name']}")
+                    processed_artwork = self.process_painting_data(raw_data)
+                    if processed_artwork:
+                        return processed_artwork[:count]
+                
+                print(f"⚠️ No results with {strategy['name']}, trying next strategy...")
+                
             except Exception as e:
-                print(f"Subject-based search attempt {retry + 1} failed: {e}")
-                if retry < max_retries - 1:
-                    wait_time = retry + 1
-                    print(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
+                print(f"❌ Error with {strategy['name']}: {e}")
+                continue
         
-        # Return only the requested count
-        return all_paintings[:count]
+        print("❌ All fallback strategies failed")
+        return []
 
-    def fetch_paintings_by_subject_with_scoring(self, poem_analysis: Dict, q_codes: List[str], count: int = 1, 
-                                               genres: List[str] = None, min_score: float = 0.4, 
-                                               max_sitelinks: int = 20) -> List[Tuple[Dict, float]]:
+    def fetch_artwork_by_subject_with_scoring(self, poem_analysis: Dict, q_codes: List[str], count: int = 1, 
+                                             genres: List[str] = None, min_score: float = 0.4, 
+                                             max_sitelinks: int = 20) -> List[Tuple[Dict, float]]:
         """
-        Fetch paintings matching specific subjects/themes and score them for quality.
+        Fetch visual artwork matching specific subjects/themes and score them for quality.
+        Uses progressive fallback with scoring: try scoring first, then fall back to un-scored matches.
         
         Args:
             poem_analysis: Dictionary containing poem analysis results
             q_codes: List of Wikidata Q-codes for subjects to match
-            count: Number of paintings to fetch
+            count: Number of artworks to fetch
             genres: Optional list of genre Q-codes to filter by
             min_score: Minimum match quality score (0.0-1.0)
             max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
             
         Returns:
-            List of tuples (painting_dict, score) sorted by score descending
+            List of tuples (artwork_dict, score) sorted by score descending
         """
         if not q_codes:
             print("No Q-codes provided for subject-based search")
             return []
         
-        print(f"Searching for paintings matching subjects: {q_codes}")
+        print(f"Searching for artwork matching subjects: {q_codes}")
         if genres:
             print(f"With genre filtering: {genres}")
         print(f"Minimum match score: {min_score}")
         
-        # Fetch larger batch to have more options for scoring
-        batch_size = min(50, count * 10)  # Fetch 10x more than needed for better selection
+        # Initialize analyzer
+        if not POEM_ANALYZER_AVAILABLE:
+            print("⚠️ Poem analyzer not available, using un-scored artwork")
+            # Fall back to regular artwork fetch without scoring
+            artwork = self.fetch_artwork_by_subject(q_codes, count, genres, max_sitelinks=max_sitelinks)
+            return [(art, 0.5) for art in artwork]  # Give neutral score
         
-        try:
-            raw_data = self.query_paintings_by_subject(
-                q_codes=q_codes,
-                limit=batch_size, 
-                offset=0, 
-                random_order=True,
-                genres=genres,
-                max_sitelinks=max_sitelinks
-            )
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Progressive fallback with scoring
+        fallback_strategies = [
+            {
+                "name": "scored specific artwork",
+                "artwork_types": ["Q3305213", "Q125191", "Q860861"],  # paintings, photos, sculptures
+                "max_sitelinks": max_sitelinks,
+                "min_score": min_score
+            },
+            {
+                "name": "scored broader artwork",
+                "artwork_types": ["Q3305213", "Q125191", "Q860861", "Q42973", "Q93184", "Q11661"],  # + drawings, prints, murals
+                "max_sitelinks": max_sitelinks + 10,
+                "min_score": min_score * 0.8  # Lower threshold
+            },
+            {
+                "name": "un-scored artwork",
+                "artwork_types": ["Q3305213", "Q125191", "Q860861", "Q42973", "Q93184", "Q11661", "Q11060274", "Q1044167"],
+                "max_sitelinks": max_sitelinks + 20,
+                "min_score": 0.0  # Accept any artwork
+            }
+        ]
+        
+        for strategy in fallback_strategies:
+            print(f"🎨 Trying {strategy['name']}...")
             
-            if not raw_data:
-                print("No subject-based data available.")
-                return []
-            
-            # Initialize analyzer once outside the loop
-            if not POEM_ANALYZER_AVAILABLE:
-                print("⚠️ Poem analyzer not available, cannot score paintings")
-                return []
-            
-            analyzer = poem_analyzer.PoemAnalyzer()
-            
-            # Process and score each painting
-            scored_paintings = []
-            
-            for item in raw_data:
-                try:
-                    # Get Wikidata URL and image first
-                    wikidata_url = item.get('painting', {}).get('value', '')
-                    image_url = item.get('image', {}).get('value', '')
-                    sitelinks = item.get('sitelinks', {}).get('value', '0')
-                    subject = item.get('subject', {}).get('value', '')
-                    genre = item.get('genre', {}).get('value', '')
-                    
-                    if not wikidata_url or not image_url:
-                        continue
-                    
-                    # Get labels using a separate, simple query
-                    labels = self.get_painting_labels(wikidata_url)
-                    title = labels.get('title', 'Unknown Title')
-                    artist = labels.get('artist', 'Unknown Artist')
-                    
-                    # Skip if we don't have basic info
-                    if title == 'Unknown Title' or artist == 'Unknown Artist':
-                        continue
-                    
-                    # Process image URL
-                    if image_url:
-                        image_url = self.get_high_res_image_url(image_url)
-                    
-                    # Create painting entry
-                    painting_entry = {
-                        "title": self.clean_text(title),
-                        "artist": self.clean_text(artist),
-                        "image": image_url,
-                        "year": None,
-                        "style": "Classical",
-                        "museum": "Unknown Location",
-                        "origin": "Unknown",
-                        "medium": "Oil on canvas",
-                        "dimensions": "Unknown dimensions",
-                        "wikidata": wikidata_url,
-                        "date": datetime.now().strftime("%Y-%m-%d"),
-                        "sitelinks": int(sitelinks),
-                        "subject_q_codes": [subject] if subject else [],
-                        "genre_q_codes": [genre] if genre else []
-                    }
-                    
-                    # Score the painting using the analyzer (already initialized)
-                    score = analyzer.score_artwork_match(
-                        poem_analysis, 
-                        painting_entry["subject_q_codes"], 
-                        painting_entry["genre_q_codes"]
-                    )
-                    
-                    # Only include paintings that meet minimum score
-                    if score >= min_score:
-                        scored_paintings.append((painting_entry, score))
-                        print(f"Scored: {title} by {artist} (score: {score:.2f})")
-                    
-                    # Add delay to be respectful to APIs
-                    time.sleep(1)
-                    
-                except Exception as e:
-                    print(f"Error processing painting data: {e}")
+            try:
+                # Fetch artwork with current strategy
+                raw_data = self.query_artwork_by_subject(
+                    q_codes=q_codes,
+                    limit=count * 10,  # Fetch more for better selection
+                    offset=0,
+                    random_order=True,
+                    genres=genres,
+                    max_sitelinks=strategy["max_sitelinks"],
+                    artwork_types=strategy["artwork_types"]
+                )
+                
+                if not raw_data:
+                    print(f"⚠️ No results with {strategy['name']}, trying next strategy...")
                     continue
-            
-            # Sort by score descending
-            scored_paintings.sort(reverse=True, key=lambda x: x[1])
-            
-            print(f"Found {len(scored_paintings)} paintings with score >= {min_score}")
-            
-            # Return only the requested count
-            return scored_paintings[:count]
-            
-        except Exception as e:
-            print(f"Error in scored fetch: {e}")
-            return []
+                
+                # Process and score each artwork
+                scored_artwork = []
+                
+                for item in raw_data:
+                    try:
+                        # Get Wikidata URL and image first
+                        wikidata_url = item.get('artwork', {}).get('value', '')
+                        image_url = item.get('image', {}).get('value', '')
+                        sitelinks = item.get('sitelinks', {}).get('value', '0')
+                        subject = item.get('subject', {}).get('value', '')
+                        genre = item.get('genre', {}).get('value', '')
+                        artwork_type = item.get('artworkType', {}).get('value', '')
+                        
+                        if not wikidata_url or not image_url:
+                            continue
+                        
+                        # Get labels using a separate, simple query
+                        labels = self.get_painting_labels(wikidata_url)
+                        title = labels.get('title', 'Unknown Title')
+                        artist = labels.get('artist', 'Unknown Artist')
+                        
+                        # Skip if we don't have basic info
+                        if title == 'Unknown Title' or artist == 'Unknown Artist':
+                            continue
+                        
+                        # Process image URL
+                        if image_url:
+                            image_url = self.get_high_res_image_url(image_url)
+                        
+                        # Determine medium based on artwork type
+                        medium = self._get_medium_from_type(artwork_type)
+                        
+                        # Create artwork entry
+                        artwork_entry = {
+                            "title": self.clean_text(title),
+                            "artist": self.clean_text(artist),
+                            "image": image_url,
+                            "year": None,
+                            "style": "Classical",
+                            "museum": "Unknown Location",
+                            "origin": "Unknown",
+                            "medium": medium,
+                            "dimensions": "Unknown dimensions",
+                            "wikidata": wikidata_url,
+                            "date": datetime.now().strftime("%Y-%m-%d"),
+                            "sitelinks": int(sitelinks),
+                            "subject_q_codes": [subject] if subject else [],
+                            "genre_q_codes": [genre] if genre else [],
+                            "artwork_type": artwork_type
+                        }
+                        
+                        # Score the artwork using the analyzer
+                        score = analyzer.score_artwork_match(
+                            poem_analysis, 
+                            artwork_entry["subject_q_codes"], 
+                            artwork_entry["genre_q_codes"]
+                        )
+                        
+                        # Only include artwork that meets minimum score
+                        if score >= strategy["min_score"]:
+                            scored_artwork.append((artwork_entry, score))
+                            print(f"Scored: {title} by {artist} (score: {score:.2f})")
+                        
+                        # Add delay to be respectful to APIs
+                        time.sleep(0.5)
+                        
+                    except Exception as e:
+                        print(f"Error processing artwork data: {e}")
+                        continue
+                
+                # Sort by score descending
+                scored_artwork.sort(reverse=True, key=lambda x: x[1])
+                
+                if scored_artwork:
+                    print(f"✅ Found {len(scored_artwork)} artworks with {strategy['name']}")
+                    return scored_artwork[:count]
+                else:
+                    print(f"⚠️ No scored results with {strategy['name']}, trying next strategy...")
+                
+            except Exception as e:
+                print(f"❌ Error with {strategy['name']}: {e}")
+                continue
+        
+        print("❌ All scoring strategies failed, falling back to random artwork")
+        # Final fallback to random artwork
+        random_artwork = self.fetch_paintings(count=count, max_sitelinks=max_sitelinks)
+        return [(art, 0.3) for art in random_artwork]  # Give low score for random
+    
+    def _get_medium_from_type(self, artwork_type: str) -> str:
+        """Get appropriate medium description from artwork type Q-code."""
+        medium_mapping = {
+            "Q3305213": "Oil on canvas",  # painting
+            "Q125191": "Photograph",       # photograph
+            "Q860861": "Marble sculpture", # sculpture
+            "Q42973": "Pencil on paper",   # drawing
+            "Q93184": "Print",            # print
+            "Q11661": "Mural",            # mural
+            "Q11060274": "Digital art",    # digital art
+            "Q1044167": "Illustration"    # illustration
+        }
+        return medium_mapping.get(artwork_type, "Mixed media")
 
     def get_daily_painting(self, max_sitelinks: int = 20) -> Dict:
         """
