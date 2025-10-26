@@ -8,6 +8,7 @@ A Python application that fetches and displays famous paintings and random publi
 - **🎨 Modern HTML Gallery**: Beautiful, responsive gallery with dark theme and smooth animations
 - **📱 Multiple Artworks**: Fetch 1-10+ artworks in a single command
 - **📝 Poetry Integration**: Fetch random public domain poems alongside artwork
+- **🎯 Complementary Matching**: Match artwork to poem themes for enhanced cultural experience
 - **💾 Local Storage**: Save artwork data, poem data, and high-quality images locally
 - **⚡ Fast Performance**: Optimized queries and smart caching for quick results
 - **🎲 Random Selection**: Different artworks and poems every time with true randomization
@@ -21,6 +22,7 @@ A Python application that fetches and displays famous paintings and random publi
 - **`daily_paintings.py`** - Main script that fetches and displays artwork and poem information
 - **`datacreator.py`** - Data fetcher that queries Wikidata for paintings
 - **`poem_fetcher.py`** - Data fetcher that queries PoetryDB for random poems
+- **`poem_analyzer.py`** - Theme analysis and artwork matching for complementary mode
 - **`requirements.txt`** - Python dependencies
 
 ### How It Works
@@ -31,6 +33,18 @@ A Python application that fetches and displays famous paintings and random publi
 4. **Image Processing**: Downloads high-resolution images from Wikimedia Commons
 5. **Gallery Generation**: Creates modern HTML gallery with responsive design for both art and poetry
 6. **Data Export**: Saves artwork metadata, poem data to JSON and images locally
+
+### Complementary Mode
+
+When using the `--complementary` flag, the workflow changes to create meaningful connections between poems and artwork:
+
+1. **Poem Analysis**: `poem_analyzer.py` analyzes poem content to detect themes (nature, love, water, etc.)
+2. **Theme Mapping**: Maps detected themes to Wikidata entity IDs (Q-codes) for artwork subjects
+3. **Subject-Based Search**: Queries Wikidata for paintings that match the poem's themes
+4. **Intelligent Fallback**: If no matching artwork is found, falls back to random selection with clear notification
+5. **Visual Indicators**: HTML gallery shows match status and detected themes for enhanced experience
+
+**Supported Themes**: Nature, flowers, water, love, death, war, night, day, city, animals, seasons, and more.
 
 ## 🚀 Setup
 
@@ -134,6 +148,18 @@ python daily_paintings.py --count 5 --output --save-image --html
 python daily_paintings.py --poems --poem-count 2 --output --html
 ```
 
+### Complementary Mode (Match Artwork to Poems)
+```bash
+# Basic complementary mode - automatically fetches poems and matches artwork
+python daily_paintings.py --complementary --output --save-image
+
+# Multiple poems with matched artwork
+python daily_paintings.py --complementary --poem-count 3 --html
+
+# Fast mode with complementary matching
+python daily_paintings.py --complementary --fast --html
+```
+
 ### Poems Only
 ```bash
 python daily_paintings.py --poems-only --poem-count 3 --output
@@ -158,6 +184,7 @@ python daily_paintings.py --help
 - `--poems, -p` - Also fetch random poems
 - `--poem-count COUNT` - Number of poems to fetch (default: 1)
 - `--poems-only` - Fetch only poems, no artwork
+- `--complementary` - Match artwork to poem themes (automatically enables --poems)
 
 ## ⚠️ Error Handling
 
