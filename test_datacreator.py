@@ -339,6 +339,86 @@ class TestGetDailyPainting:
         assert painting is None
 
 
+class TestQueryPaintingsBySubject:
+    """Test subject-based painting queries."""
+    
+    @patch('datacreator.requests.Session.get')
+    def test_query_paintings_by_subject_success(self, mock_get):
+        """Test successful subject-based query."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {'painting': {'value': 'url1'}, 'image': {'value': 'img1'}}
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        creator = datacreator.PaintingDataCreator()
+        result = creator.query_paintings_by_subject(['Q7860', 'Q506'], limit=1)
+        
+        assert len(result) == 1
+        mock_get.assert_called_once()
+    
+    @patch('datacreator.requests.Session.get')
+    def test_query_paintings_by_subject_error(self, mock_get):
+        """Test subject-based query with error."""
+        import requests
+        mock_get.side_effect = requests.RequestException("Network error")
+        
+        creator = datacreator.PaintingDataCreator()
+        result = creator.query_paintings_by_subject(['Q7860'], limit=1)
+        
+        assert result == []
+    
+    def test_query_paintings_by_subject_empty_q_codes(self):
+        """Test subject-based query with empty Q-codes."""
+        creator = datacreator.PaintingDataCreator()
+        result = creator.query_paintings_by_subject([], limit=1)
+        
+        assert result == []
+    
+    @patch('datacreator.PaintingDataCreator.query_paintings_by_subject')
+    @patch('datacreator.PaintingDataCreator.process_painting_data')
+    def test_fetch_paintings_by_subject_success(self, mock_process, mock_query):
+        """Test successful subject-based painting fetch."""
+        mock_query.return_value = [
+            {'painting': {'value': 'url1'}, 'image': {'value': 'img1'}}
+        ]
+        mock_process.return_value = [
+            {'title': 'Flower Painting', 'artist': 'Test Artist'}
+        ]
+        
+        creator = datacreator.PaintingDataCreator()
+        paintings = creator.fetch_paintings_by_subject(['Q7860', 'Q506'], count=1)
+        
+        assert len(paintings) == 1
+        assert paintings[0]['title'] == 'Flower Painting'
+        mock_query.assert_called_once()
+        mock_process.assert_called_once()
+    
+    @patch('datacreator.PaintingDataCreator.query_paintings_by_subject')
+    def test_fetch_paintings_by_subject_no_results(self, mock_query):
+        """Test subject-based fetch with no results."""
+        mock_query.return_value = []
+        
+        creator = datacreator.PaintingDataCreator()
+        paintings = creator.fetch_paintings_by_subject(['Q7860'], count=1)
+        
+        assert len(paintings) == 0
+        # Should be called at least once (may be called multiple times due to retry logic)
+        assert mock_query.call_count >= 1
+    
+    def test_fetch_paintings_by_subject_empty_q_codes(self):
+        """Test subject-based fetch with empty Q-codes."""
+        creator = datacreator.PaintingDataCreator()
+        paintings = creator.fetch_paintings_by_subject([], count=1)
+        
+        assert len(paintings) == 0
+
+
 class TestQueryWikidataPaintings:
     """Test Wikidata query functionality."""
     

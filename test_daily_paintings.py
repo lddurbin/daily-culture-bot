@@ -54,6 +54,19 @@ class TestArgumentParsing:
         with patch('sys.argv', ['daily_paintings.py', '--fast']):
             args = daily_paintings.parse_arguments()
             assert args.fast == True
+    
+    def test_complementary_flag(self):
+        """Test --complementary flag."""
+        with patch('sys.argv', ['daily_paintings.py', '--complementary']):
+            args = daily_paintings.parse_arguments()
+            assert args.complementary == True
+    
+    def test_complementary_with_poems_flag(self):
+        """Test --complementary flag with --poems."""
+        with patch('sys.argv', ['daily_paintings.py', '--complementary', '--poems']):
+            args = daily_paintings.parse_arguments()
+            assert args.complementary == True
+            assert args.poems == True
 
 
 class TestDownloadImage:
@@ -168,7 +181,7 @@ class TestGenerateHTMLGallery:
         ]
         
         with patch('builtins.open', mock_open()) as mock_file:
-            result = daily_paintings.generate_html_gallery(paintings, [None, None])
+            result = daily_paintings.generate_html_gallery(paintings, [None, None], match_status=["random", "random"])
             assert result == 'artwork_gallery.html'
             mock_file.assert_called_once()
     
@@ -191,7 +204,7 @@ class TestGenerateHTMLGallery:
         image_paths = ['./Test_Painting_2020.jpg']
         
         with patch('builtins.open', mock_open()) as mock_file:
-            result = daily_paintings.generate_html_gallery(paintings, image_paths)
+            result = daily_paintings.generate_html_gallery(paintings, image_paths, match_status=["random"])
             assert result == 'artwork_gallery.html'
     
     def test_generate_html_gallery_check_content(self):
@@ -212,7 +225,7 @@ class TestGenerateHTMLGallery:
         
         m = mock_open()
         with patch('builtins.open', m):
-            daily_paintings.generate_html_gallery(paintings, [None])
+            daily_paintings.generate_html_gallery(paintings, [None], match_status=["random"])
             
             # Get the content that was written
             written_content = ''.join(call.args[0] for call in m().write.call_args_list)
@@ -223,6 +236,120 @@ class TestGenerateHTMLGallery:
             assert 'Daily Artwork Gallery' in written_content
             assert '<html' in written_content.lower()
             assert date.today().strftime('%B %d, %Y') in written_content
+
+
+class TestComplementaryMode:
+    """Test complementary mode functionality."""
+    
+    @patch('daily_paintings.generate_html_gallery')
+    @patch('daily_paintings.download_image')
+    @patch('daily_paintings.datacreator.PaintingDataCreator')
+    @patch('daily_paintings.poem_fetcher.PoemFetcher')
+    @patch('daily_paintings.poem_analyzer.PoemAnalyzer')
+    def test_complementary_mode_workflow(self, mock_analyzer_class, mock_poem_fetcher_class, mock_creator_class, mock_download, mock_html):
+        """Test complementary mode workflow."""
+        # Setup mocks
+        mock_creator = Mock()
+        mock_poem_fetcher = Mock()
+        mock_analyzer = Mock()
+        
+        mock_creator_class.return_value = mock_creator
+        mock_poem_fetcher_class.return_value = mock_poem_fetcher
+        mock_analyzer_class.return_value = mock_analyzer
+        
+        # Mock poem data
+        mock_poem_fetcher.fetch_random_poems.return_value = [
+            {"title": "Nature Poem", "text": "flowers and trees", "author": "Test Author", 
+             "line_count": 10, "source": "Test Source"}
+        ]
+        mock_poem_fetcher.create_sample_poems.return_value = [
+            {"title": "Nature Poem", "text": "flowers and trees", "author": "Test Author",
+             "line_count": 10, "source": "Test Source"}
+        ]
+        
+        # Mock poem analysis
+        mock_analyzer.analyze_multiple_poems.return_value = [
+            {"themes": ["nature", "flowers"], "q_codes": ["Q7860", "Q506"], "has_themes": True}
+        ]
+        mock_analyzer.get_combined_q_codes.return_value = ["Q7860", "Q506"]
+        
+        # Mock artwork data
+        mock_creator.fetch_paintings_by_subject.return_value = [
+            {"title": "Flower Painting", "artist": "Test Artist", "image": "test.jpg", "year": "2020", 
+             "style": "Modern", "medium": "Oil", "museum": "Test Museum", "origin": "Test Country"}
+        ]
+        mock_creator.create_sample_paintings.return_value = [
+            {"title": "Flower Painting", "artist": "Test Artist", "image": "test.jpg", "year": "2020",
+             "style": "Modern", "medium": "Oil", "museum": "Test Museum", "origin": "Test Country"}
+        ]
+        
+        mock_download.return_value = './test.jpg'
+        mock_html.return_value = 'test.html'
+        
+        with patch('sys.argv', ['daily_paintings.py', '--complementary', '--fast']):
+            with patch('builtins.open', mock_open()):
+                daily_paintings.main()
+        
+        # Verify complementary mode was used
+        mock_poem_fetcher.create_sample_poems.assert_called_once()
+        mock_analyzer.analyze_multiple_poems.assert_called_once()
+        mock_creator.create_sample_paintings.assert_called_once()
+    
+    @patch('daily_paintings.datacreator.PaintingDataCreator')
+    @patch('daily_paintings.poem_fetcher.PoemFetcher')
+    @patch('daily_paintings.poem_analyzer.PoemAnalyzer')
+    def test_complementary_mode_fallback(self, mock_analyzer_class, mock_poem_fetcher_class, mock_creator_class):
+        """Test complementary mode fallback when no matching artwork found."""
+        # Setup mocks
+        mock_creator = Mock()
+        mock_poem_fetcher = Mock()
+        mock_analyzer = Mock()
+        
+        mock_creator_class.return_value = mock_creator
+        mock_poem_fetcher_class.return_value = mock_poem_fetcher
+        mock_analyzer_class.return_value = mock_analyzer
+        
+        # Mock poem data
+        mock_poem_fetcher.fetch_random_poems.return_value = [
+            {"title": "Nature Poem", "text": "flowers and trees", "author": "Test Author", 
+             "line_count": 10, "source": "Test Source"}
+        ]
+        mock_poem_fetcher.create_sample_poems.return_value = [
+            {"title": "Nature Poem", "text": "flowers and trees", "author": "Test Author",
+             "line_count": 10, "source": "Test Source"}
+        ]
+        
+        # Mock poem analysis
+        mock_analyzer.analyze_multiple_poems.return_value = [
+            {"themes": ["nature", "flowers"], "q_codes": ["Q7860", "Q506"], "has_themes": True}
+        ]
+        mock_analyzer.get_combined_q_codes.return_value = ["Q7860", "Q506"]
+        
+        # Mock no matching artwork found
+        mock_creator.fetch_paintings_by_subject.return_value = []
+        mock_creator.fetch_paintings.return_value = [
+            {"title": "Random Painting", "artist": "Test Artist", "image": "test.jpg", "year": "2020",
+             "style": "Classical", "medium": "Oil", "museum": "Test Museum", "origin": "Test Country"}
+        ]
+        mock_creator.create_sample_paintings.return_value = [
+            {"title": "Random Painting", "artist": "Test Artist", "image": "test.jpg", "year": "2020",
+             "style": "Classical", "medium": "Oil", "museum": "Test Museum", "origin": "Test Country"}
+        ]
+        
+        with patch('sys.argv', ['daily_paintings.py', '--complementary', '--fast']):
+            with patch('builtins.open', mock_open()):
+                daily_paintings.main()
+        
+        # Verify fallback was used
+        mock_creator.create_sample_paintings.assert_called_once()
+    
+    def test_complementary_poems_only_error(self):
+        """Test that complementary and poems-only flags cannot be used together."""
+        with patch('sys.argv', ['daily_paintings.py', '--complementary', '--poems-only']):
+            with patch('builtins.print') as mock_print:
+                daily_paintings.main()
+                # Should print error message
+                mock_print.assert_any_call("❌ Error: --complementary and --poems-only cannot be used together")
 
 
 class TestMain:
