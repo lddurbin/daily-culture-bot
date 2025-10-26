@@ -48,6 +48,68 @@ class PaintingDataCreator:
             "Q12124693": "Regionalism"
         }
 
+    def query_paintings_by_subject(self, q_codes: List[str], limit: int = 50, offset: int = 0, random_order: bool = True) -> List[Dict]:
+        """
+        Query Wikidata for paintings matching specific subjects/themes.
+        
+        Args:
+            q_codes: List of Wikidata Q-codes for subjects to match
+            limit: Number of results to return
+            offset: Offset for pagination
+            random_order: Whether to randomize the order of results
+            
+        Returns:
+            List of raw Wikidata results
+        """
+        if not q_codes:
+            return []
+        
+        # Create Q-code filter clause
+        q_code_filters = " || ".join([f"?subject = wd:{q_code}" for q_code in q_codes])
+        
+        # Choose ordering
+        if random_order:
+            order_clause = "ORDER BY RAND()"
+        else:
+            order_clause = "ORDER BY DESC(?year)"
+        
+        sparql_query = f"""
+        SELECT ?painting ?image WHERE {{
+          ?painting wdt:P31 wd:Q3305213 .  # Instance of painting
+          ?painting wdt:P18 ?image .        # Has image
+          
+          # Match by subject/depicts properties
+          {{
+            ?painting wdt:P180 ?subject .    # depicts
+            FILTER({q_code_filters})
+          }} UNION {{
+            ?painting wdt:P921 ?subject .   # main subject
+            FILTER({q_code_filters})
+          }} UNION {{
+            ?painting wdt:P136 ?subject .   # genre
+            FILTER({q_code_filters})
+          }}
+        }}
+        {order_clause}
+        LIMIT {limit}
+        OFFSET {offset}
+        """
+        
+        try:
+            response = self.session.get(
+                self.wikidata_endpoint,
+                params={'query': sparql_query, 'format': 'json'},
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            return data['results']['bindings']
+            
+        except requests.RequestException as e:
+            print(f"Error querying Wikidata for subjects: {e}")
+            return []
+
     def query_wikidata_paintings(self, limit: int = 50, offset: int = 0, filter_type: str = "both", random_order: bool = False) -> List[Dict]:
         """
         Query Wikidata for paintings with detailed information.
@@ -480,6 +542,77 @@ class PaintingDataCreator:
         # Return empty list if no paintings were fetched (no automatic fallback)
         if not all_paintings:
             print("Could not fetch from Wikidata. No paintings retrieved.")
+        
+        # Return only the requested count
+        return all_paintings[:count]
+
+    def fetch_paintings_by_subject(self, q_codes: List[str], count: int = 1, use_sample_on_error: bool = True) -> List[Dict]:
+        """
+        Fetch paintings matching specific subjects/themes from Wikidata.
+        
+        Args:
+            q_codes: List of Wikidata Q-codes for subjects to match
+            count: Number of paintings to fetch
+            use_sample_on_error: Whether to use sample data if API fails
+            
+        Returns:
+            List of processed painting dictionaries
+        """
+        if not q_codes:
+            print("No Q-codes provided for subject-based search")
+            return []
+        
+        print(f"Searching for paintings matching subjects: {q_codes}")
+        
+        all_paintings = []
+        batch_size = 10
+        
+        # Add random offset for variety
+        max_offset = min(200, count * 3)  # Smaller range for subject-based search
+        random_offset = random.randint(0, max_offset)
+        print(f"Using random starting offset: {random_offset}")
+        
+        offset = random_offset
+        max_retries = 2
+        
+        for retry in range(max_retries):
+            try:
+                while len(all_paintings) < count:
+                    print(f"Fetching subject-based batch starting at offset {offset}...")
+                    
+                    raw_data = self.query_paintings_by_subject(
+                        q_codes=q_codes,
+                        limit=batch_size, 
+                        offset=offset, 
+                        random_order=True
+                    )
+                    
+                    if not raw_data:
+                        print("No more subject-based data available.")
+                        break
+                    
+                    processed_batch = self.process_painting_data(raw_data)
+                    all_paintings.extend(processed_batch)
+                    
+                    offset += batch_size
+                    
+                    # Shorter delay for subject-based queries
+                    time.sleep(1)
+                    
+                    # Break if we've fetched enough
+                    if len(processed_batch) < batch_size // 2:
+                        break
+                
+                # If we got some paintings, break the retry loop
+                if all_paintings:
+                    break
+                    
+            except Exception as e:
+                print(f"Subject-based search attempt {retry + 1} failed: {e}")
+                if retry < max_retries - 1:
+                    wait_time = retry + 1
+                    print(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
         
         # Return only the requested count
         return all_paintings[:count]
