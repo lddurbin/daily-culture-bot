@@ -648,7 +648,8 @@ class PaintingDataCreator:
 
     def fetch_artwork_by_subject_with_scoring(self, poem_analysis: Dict, q_codes: List[str], count: int = 1, 
                                              genres: List[str] = None, min_score: float = 0.4, 
-                                             max_sitelinks: int = 20) -> List[Tuple[Dict, float]]:
+                                             max_sitelinks: int = 20, poet_birth_year: Optional[int] = None,
+                                             poet_death_year: Optional[int] = None) -> List[Tuple[Dict, float]]:
         """
         Fetch visual artwork matching specific subjects/themes and score them for quality.
         Uses progressive fallback with scoring: try scoring first, then fall back to un-scored matches.
@@ -660,6 +661,8 @@ class PaintingDataCreator:
             genres: Optional list of genre Q-codes to filter by
             min_score: Minimum match quality score (0.0-1.0)
             max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
+            poet_birth_year: Optional year poet was born (for era matching)
+            poet_death_year: Optional year poet died (for era matching)
             
         Returns:
             List of tuples (artwork_dict, score) sorted by score descending
@@ -755,12 +758,15 @@ class PaintingDataCreator:
                         # Determine medium based on artwork type
                         medium = self._get_medium_from_type(artwork_type)
                         
+                        # Get artwork inception date (year)
+                        artwork_year = self.get_artwork_inception_date(wikidata_url)
+                        
                         # Create artwork entry
                         artwork_entry = {
                             "title": self.clean_text(title),
                             "artist": self.clean_text(artist),
                             "image": image_url,
-                            "year": None,
+                            "year": artwork_year,
                             "style": "Classical",
                             "museum": "Unknown Location",
                             "origin": "Unknown",
@@ -774,11 +780,14 @@ class PaintingDataCreator:
                             "artwork_type": artwork_type
                         }
                         
-                        # Score the artwork using the analyzer
+                        # Score the artwork using the analyzer with era information
                         score = analyzer.score_artwork_match(
                             poem_analysis, 
                             artwork_entry["subject_q_codes"], 
-                            artwork_entry["genre_q_codes"]
+                            artwork_entry["genre_q_codes"],
+                            artwork_year=artwork_year,
+                            poet_birth_year=poet_birth_year,
+                            poet_death_year=poet_death_year
                         )
                         
                         # Only include artwork that meets minimum score
