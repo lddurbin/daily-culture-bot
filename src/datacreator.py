@@ -955,51 +955,5 @@ class PaintingDataCreator:
             print(f"Error appending to JSON: {e}")
 
 
-def main():
-    """
-    Main function to demonstrate the data creator functionality.
-    """
-    creator = PaintingDataCreator()
-    
-    print("Daily Painting Bot - Data Creator")
-    print("=" * 40)
-    print("Using combined license+age filter with random selection...")
-    
-    # Get user input for number of paintings (default to 1 for daily use)
-    try:
-        count = int(input("How many paintings would you like to fetch? (default: 1): ") or "1")
-    except ValueError:
-        count = 1
-    
-    # Fetch paintings with optimal settings
-    paintings = creator.fetch_paintings(count)  # Uses defaults: count=1, both filter, random order
-    
-    if paintings:
-        print(f"\nSuccessfully fetched {len(paintings)} painting{'s' if len(paintings) != 1 else ''}!")
-        
-        # Ask user what to do with the data
-        print("\nWhat would you like to do with the data?")
-        print("1. Save to new file (new_paintings.json)")
-        print("2. Append to existing paintings database")
-        print("3. Both")
-        
-        choice = input("Enter choice (1-3, default: 2): ").strip() or "2"
-        
-        if choice in ["1", "3"]:
-            creator.save_to_json(paintings, "new_paintings.json")
-        
-        if choice in ["2", "3"]:
-            creator.append_to_existing_json(paintings)
-        
-        print("\nSample of fetched data:")
-        for i, painting in enumerate(paintings[:3]):
-            print(f"\n{i+1}. {painting['title']} by {painting['artist']} ({painting['year']})")
-            print(f"   Style: {painting['style']}")
-            print(f"   Museum: {painting['museum']}")
-    
-    else:
-        print("No paintings were fetched. Please check your internet connection and try again.")
-
-
-if __name__ == "__main__":
-    main()
+# CLI entry point moved to daily_culture_bot.py
+# Use: python daily_culture_bot.py
