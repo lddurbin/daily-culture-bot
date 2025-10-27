@@ -9,17 +9,23 @@ It provides functionality to get poems and format them for display.
 import requests
 import json
 import random
+import re
 from datetime import datetime
 from typing import List, Dict, Optional
 
 
 class PoemFetcher:
-    def __init__(self):
+    def __init__(self, enable_poet_dates: bool = True):
         self.poetrydb_base_url = "https://poetrydb.org"
+        self.wikidata_endpoint = "https://query.wikidata.org/sparql"
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'DailyCultureBot/1.0 (https://github.com/yourusername/daily-culture-bot)'
         })
+        # Cache for poet dates to avoid repeated API calls
+        self.poet_date_cache = {}
+        # Option to disable poet date fetching (useful when Wikidata is slow)
+        self.enable_poet_dates = enable_poet_dates
     
     def fetch_random_poem(self) -> Optional[Dict]:
         """
@@ -103,6 +109,13 @@ class PoemFetcher:
                 "source": "PoetryDB",
                 "public_domain": True
             }
+            
+            # Enrich with poet date information
+            try:
+                poem_entry = self.enrich_poem_with_dates(poem_entry)
+            except Exception as e:
+                print(f"Error enriching poem with dates: {e}")
+                # Continue with poem_entry as-is if enrichment fails
             
             return poem_entry
             
@@ -235,6 +248,124 @@ class PoemFetcher:
         
         return valid_poems
     
+    def get_poet_dates(self, poet_name: str) -> Optional[Dict[str, int]]:
+        """
+        Get poet birth/death dates from Wikidata.
+        Returns dict with birth_year and death_year (None if living/unknown).
+        
+        Uses Wikidata P569 (birth) and P570 (death) properties.
+        """
+        if not poet_name:
+            return None
+        
+        # Check cache first
+        if poet_name in self.poet_date_cache:
+            return self.poet_date_cache[poet_name]
+        
+        try:
+            # Query Wikidata for poet entity using author name
+            sparql_query = f"""
+            SELECT ?birth ?death WHERE {{
+              ?person rdfs:label ?name .
+              FILTER(LANG(?name) = "en")
+              FILTER(CONTAINS(LCASE(?name), LCASE("{poet_name}")))
+              ?person wdt:P569 ?birth .
+              OPTIONAL {{ ?person wdt:P570 ?death }}
+            }}
+            LIMIT 1
+            """
+            
+            response = self.session.get(
+                self.wikidata_endpoint,
+                params={'query': sparql_query, 'format': 'json'},
+                timeout=10  # Reduced timeout from 30s to 10s
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data['results']['bindings']
+                if results:
+                    birth_value = results[0].get('birth', {}).get('value', '')
+                    death_value = results[0].get('death', {}).get('value', '')
+                    
+                    # Extract years from date strings
+                    birth_year = None
+                    death_year = None
+                    
+                    if birth_value:
+                        birth_match = re.match(r'^(\d{4})', birth_value)
+                        if birth_match:
+                            birth_year = int(birth_match.group(1))
+                    
+                    if death_value:
+                        death_match = re.match(r'^(\d{4})', death_value)
+                        if death_match:
+                            death_year = int(death_match.group(1))
+                    
+                    result = {
+                        'birth_year': birth_year,
+                        'death_year': death_year
+                    }
+                    
+                    # Cache the result
+                    self.poet_date_cache[poet_name] = result
+                    return result
+        except Exception as e:
+            print(f"Error getting poet dates for {poet_name}: {e}")
+        
+        # Cache None result to avoid repeated failed lookups
+        self.poet_date_cache[poet_name] = None
+        return None
+    
+    def enrich_poem_with_dates(self, poem: Dict) -> Dict:
+        """
+        Enrich poem dictionary with poet date information.
+        Adds poet_birth_year, poet_death_year, and poet_lifespan fields.
+        """
+        # If poet date fetching is disabled, just add None values
+        if not self.enable_poet_dates:
+            poem['poet_birth_year'] = None
+            poem['poet_death_year'] = None
+            poem['poet_lifespan'] = None
+            return poem
+        
+        try:
+            poet_name = poem.get('author', '')
+            if not poet_name:
+                poem['poet_birth_year'] = None
+                poem['poet_death_year'] = None
+                poem['poet_lifespan'] = None
+                return poem
+            
+            poet_dates = self.get_poet_dates(poet_name)
+            
+            if poet_dates:
+                birth_year = poet_dates.get('birth_year')
+                death_year = poet_dates.get('death_year')
+                
+                poem['poet_birth_year'] = birth_year
+                poem['poet_death_year'] = death_year
+                
+                # Format lifespan string
+                if birth_year and death_year:
+                    poem['poet_lifespan'] = f"({birth_year}-{death_year})"
+                elif birth_year:
+                    poem['poet_lifespan'] = f"({birth_year}-present)"
+                else:
+                    poem['poet_lifespan'] = None
+            else:
+                poem['poet_birth_year'] = None
+                poem['poet_death_year'] = None
+                poem['poet_lifespan'] = None
+            
+            return poem
+        except Exception as e:
+            print(f"Error enriching poem with dates: {e}")
+            poem['poet_birth_year'] = None
+            poem['poet_death_year'] = None
+            poem['poet_lifespan'] = None
+            return poem
+    
     def create_sample_poems(self, count: int = 3) -> List[Dict]:
         """
         Create sample poems for testing when PoetryDB is not accessible.
@@ -253,7 +384,10 @@ class PoemFetcher:
                 "line_count": 20,
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "source": "Sample Data",
-                "public_domain": True
+                "public_domain": True,
+                "poet_birth_year": 1874,
+                "poet_death_year": 1963,
+                "poet_lifespan": "(1874-1963)"
             },
             {
                 "title": "Sonnet 18",
@@ -262,7 +396,10 @@ class PoemFetcher:
                 "line_count": 14,
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "source": "Sample Data",
-                "public_domain": True
+                "public_domain": True,
+                "poet_birth_year": 1564,
+                "poet_death_year": 1616,
+                "poet_lifespan": "(1564-1616)"
             },
             {
                 "title": "I Wandered Lonely as a Cloud",
@@ -271,7 +408,10 @@ class PoemFetcher:
                 "line_count": 24,
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "source": "Sample Data",
-                "public_domain": True
+                "public_domain": True,
+                "poet_birth_year": 1770,
+                "poet_death_year": 1850,
+                "poet_lifespan": "(1770-1850)"
             }
         ]
         

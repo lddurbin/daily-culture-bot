@@ -301,6 +301,49 @@ class PaintingDataCreator:
         # For other URLs, return as-is
         return commons_url
 
+    def get_artwork_inception_date(self, wikidata_url: str) -> Optional[int]:
+        """
+        Get artwork inception/creation date from Wikidata URL.
+        Returns year as integer or None if unavailable.
+        
+        Uses P571 (inception) property from Wikidata.
+        """
+        if not wikidata_url:
+            return None
+        
+        try:
+            # Extract Q-ID from URL
+            q_id = wikidata_url.split('/')[-1]
+            
+            sparql_query = f"""
+            SELECT ?inception WHERE {{
+              wd:{q_id} wdt:P571 ?inception .
+            }}
+            LIMIT 1
+            """
+            
+            response = self.session.get(
+                self.wikidata_endpoint,
+                params={'query': sparql_query, 'format': 'json'},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data['results']['bindings']
+                if results:
+                    inception_value = results[0].get('inception', {}).get('value', '')
+                    if inception_value:
+                        # Parse date string to extract year
+                        # Handle various formats: YYYY, YYYY-MM-DD, date ranges
+                        year_match = re.match(r'^(\d{4})', inception_value)
+                        if year_match:
+                            return int(year_match.group(1))
+        except Exception as e:
+            print(f"Error getting inception date: {e}")
+        
+        return None
+
     def get_painting_dimensions(self, wikidata_url: str) -> str:
         """
         Get painting dimensions from Wikidata URL.
@@ -416,8 +459,12 @@ class PaintingDataCreator:
                 if image_url:
                     image_url = self.get_high_res_image_url(image_url)
                 
-                # Use default values for other fields
-                year = None
+                # Fetch inception date from Wikidata
+                try:
+                    year = self.get_artwork_inception_date(wikidata_url)
+                except Exception as e:
+                    print(f"Error fetching inception date for {title}: {e}")
+                    year = None
                 style = "Classical"
                 museum = "Unknown Location"
                 origin = "Unknown"
