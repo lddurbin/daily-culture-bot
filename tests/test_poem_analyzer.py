@@ -57,67 +57,79 @@ class TestPoemAnalyzerInit:
 class TestThemeDetection:
     """Test theme detection functionality."""
     
-    def test_nature_theme_detection(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_nature_theme_detection(self, mock_openai_analyzer_module):
         """Test detection of nature themes."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poem = {
-            "title": "Forest Walk",
-            "text": "I walked through the forest among the trees and flowers. The green leaves rustled in the wind."
-        }
-        
-        analysis = analyzer.analyze_poem(poem)
-        
-        assert analysis["has_themes"] == True
-        assert "nature" in analysis["themes"]
-        assert "flowers" in analysis["themes"]
-        assert analysis["total_matches"] > 0
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poem = {
+                "title": "Forest Walk",
+                "text": "I walked through the forest among the trees and flowers. The green leaves rustled in the wind."
+            }
+            
+            analysis = analyzer.analyze_poem(poem)
+            
+            assert analysis["has_themes"] == True
+            assert "nature" in analysis["themes"]
+            assert "flowers" in analysis["themes"]
+            assert analysis["total_matches"] > 0
     
-    def test_water_theme_detection(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_water_theme_detection(self, mock_openai_analyzer_module):
         """Test detection of water themes."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poem = {
-            "title": "Ocean Waves",
-            "text": "The waves crashed against the shore. The sea was calm and peaceful."
-        }
-        
-        analysis = analyzer.analyze_poem(poem)
-        
-        assert analysis["has_themes"] == True
-        assert "water" in analysis["themes"]
-        assert analysis["total_matches"] > 0
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poem = {
+                "title": "Ocean Waves",
+                "text": "The waves crashed against the shore. The sea was calm and peaceful."
+            }
+            
+            analysis = analyzer.analyze_poem(poem)
+            
+            assert analysis["has_themes"] == True
+            assert "water" in analysis["themes"]
+            assert analysis["total_matches"] > 0
     
-    def test_love_theme_detection(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_love_theme_detection(self, mock_openai_analyzer_module):
         """Test detection of love themes."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poem = {
-            "title": "My Beloved",
-            "text": "I love you with all my heart. You are my dear and beloved."
-        }
-        
-        analysis = analyzer.analyze_poem(poem)
-        
-        assert analysis["has_themes"] == True
-        assert "love" in analysis["themes"]
-        assert analysis["total_matches"] > 0
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poem = {
+                "title": "My Beloved",
+                "text": "I love you with all my heart. You are my dear and beloved."
+            }
+            
+            analysis = analyzer.analyze_poem(poem)
+            
+            assert analysis["has_themes"] == True
+            assert "love" in analysis["themes"]
+            assert analysis["total_matches"] > 0
     
-    def test_multiple_themes(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_multiple_themes(self, mock_openai_analyzer_module):
         """Test detection of multiple themes."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poem = {
-            "title": "Garden of Love",
-            "text": "In the garden, among the flowers, I found love. The roses bloomed as my heart did."
-        }
-        
-        analysis = analyzer.analyze_poem(poem)
-        
-        assert analysis["has_themes"] == True
-        assert "flowers" in analysis["themes"]
-        assert "love" in analysis["themes"]
-        assert len(analysis["themes"]) >= 2
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poem = {
+                "title": "Garden of Love",
+                "text": "In the garden, among the flowers, I found love. The roses bloomed as my heart did."
+            }
+            
+            analysis = analyzer.analyze_poem(poem)
+            
+            assert analysis["has_themes"] == True
+            assert "flowers" in analysis["themes"]
+            assert "love" in analysis["themes"]
+            assert len(analysis["themes"]) >= 2
     
     def test_no_themes_detected(self):
         """Test when no themes are detected."""
@@ -158,94 +170,109 @@ class TestThemeDetection:
 class TestQCodeMapping:
     """Test Q-code mapping functionality."""
     
-    def test_q_code_extraction(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_q_code_extraction(self, mock_openai_analyzer_module):
         """Test extraction of Q-codes from themes."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poem = {
-            "title": "Nature and Love",
-            "text": "The flowers bloom in the garden where love grows."
-        }
-        
-        analysis = analyzer.analyze_poem(poem)
-        
-        assert len(analysis["q_codes"]) > 0
-        # Check that Q-codes are valid format (Q followed by numbers)
-        for q_code in analysis["q_codes"]:
-            assert q_code.startswith("Q")
-            assert q_code[1:].isdigit()
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poem = {
+                "title": "Nature and Love",
+                "text": "The flowers bloom in the garden where love grows."
+            }
+            
+            analysis = analyzer.analyze_poem(poem)
+            
+            assert len(analysis["q_codes"]) > 0
+            # Check that Q-codes are valid format (Q followed by numbers)
+            for q_code in analysis["q_codes"]:
+                assert q_code.startswith("Q")
+                assert q_code[1:].isdigit()
     
-    def test_q_code_deduplication(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_q_code_deduplication(self, mock_openai_analyzer_module):
         """Test that duplicate Q-codes are removed."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        # Create analysis with overlapping themes that might have same Q-codes
-        analysis1 = analyzer.analyze_poem({"title": "Flowers", "text": "beautiful flowers bloom"})
-        analysis2 = analyzer.analyze_poem({"title": "Garden", "text": "garden with flowers"})
-        
-        combined_q_codes = analyzer.get_combined_q_codes([analysis1, analysis2])
-        
-        # Should not have duplicates
-        assert len(combined_q_codes) == len(set(combined_q_codes))
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            # Create analysis with overlapping themes that might have same Q-codes
+            analysis1 = analyzer.analyze_poem({"title": "Flowers", "text": "beautiful flowers bloom"})
+            analysis2 = analyzer.analyze_poem({"title": "Garden", "text": "garden with flowers"})
+            
+            combined_q_codes = analyzer.get_combined_q_codes([analysis1, analysis2])
+            
+            # Should not have duplicates
+            assert len(combined_q_codes) == len(set(combined_q_codes))
     
-    def test_empty_q_codes(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_empty_q_codes(self, mock_openai_analyzer_module):
         """Test handling of empty Q-codes."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poem = {
-            "title": "Abstract",
-            "text": "The concept is complex."
-        }
-        
-        analysis = analyzer.analyze_poem(poem)
-        
-        assert analysis["q_codes"] == []
-        assert analysis["has_themes"] == False
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poem = {
+                "title": "Abstract",
+                "text": "The concept is complex."
+            }
+            
+            analysis = analyzer.analyze_poem(poem)
+            
+            assert analysis["q_codes"] == []
+            assert analysis["has_themes"] == False
 
 
 class TestConfidenceScores:
     """Test confidence score calculation."""
     
-    def test_confidence_calculation(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_confidence_calculation(self, mock_openai_analyzer_module):
         """Test that confidence scores are calculated correctly."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poem = {
-            "title": "Flower Garden",
-            "text": "The flowers flowers flowers bloom in the garden garden."
-        }
-        
-        analysis = analyzer.analyze_poem(poem)
-        
-        assert "confidence_scores" in analysis
-        assert len(analysis["confidence_scores"]) > 0
-        
-        for theme, confidence in analysis["confidence_scores"].items():
-            assert 0 <= confidence <= 1
-            assert isinstance(confidence, float)
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poem = {
+                "title": "Flower Garden",
+                "text": "The flowers flowers flowers bloom in the garden garden."
+            }
+            
+            analysis = analyzer.analyze_poem(poem)
+            
+            assert "confidence_scores" in analysis
+            assert len(analysis["confidence_scores"]) > 0
+            
+            for theme, confidence in analysis["confidence_scores"].items():
+                assert 0 <= confidence <= 1
+                assert isinstance(confidence, float)
     
-    def test_confidence_with_frequency(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_confidence_with_frequency(self, mock_openai_analyzer_module):
         """Test that confidence increases with word frequency."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        # Poem with many nature words
-        poem_high = {
-            "title": "Nature Nature",
-            "text": "nature nature nature forest trees flowers garden nature"
-        }
-        
-        # Poem with few nature words
-        poem_low = {
-            "title": "Brief Nature",
-            "text": "nature"
-        }
-        
-        analysis_high = analyzer.analyze_poem(poem_high)
-        analysis_low = analyzer.analyze_poem(poem_low)
-        
-        if "nature" in analysis_high["confidence_scores"] and "nature" in analysis_low["confidence_scores"]:
-            # Both might be capped at 1.0, so check that high has more matches
-            assert analysis_high["theme_scores"]["nature"] > analysis_low["theme_scores"]["nature"]
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            # Poem with many nature words
+            poem_high = {
+                "title": "Nature Nature",
+                "text": "nature nature nature forest trees flowers garden nature"
+            }
+            
+            # Poem with few nature words
+            poem_low = {
+                "title": "Brief Nature",
+                "text": "nature"
+            }
+            
+            analysis_high = analyzer.analyze_poem(poem_high)
+            analysis_low = analyzer.analyze_poem(poem_low)
+            
+            if "nature" in analysis_high["confidence_scores"] and "nature" in analysis_low["confidence_scores"]:
+                # Both might be capped at 1.0, so check that high has more matches
+                assert analysis_high["theme_scores"]["nature"] > analysis_low["theme_scores"]["nature"]
 
 
 class TestEdgeCases:
@@ -305,35 +332,41 @@ class TestEdgeCases:
 class TestMultiplePoems:
     """Test analysis of multiple poems."""
     
-    def test_analyze_multiple_poems(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_analyze_multiple_poems(self, mock_openai_analyzer_module):
         """Test analysis of multiple poems."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poems = [
-            {"title": "Nature", "text": "flowers and trees"},
-            {"title": "Love", "text": "I love you"},
-            {"title": "Water", "text": "waves and sea"}
-        ]
-        
-        analyses = analyzer.analyze_multiple_poems(poems)
-        
-        assert len(analyses) == 3
-        assert all(analysis["has_themes"] for analysis in analyses)
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poems = [
+                {"title": "Nature", "text": "flowers and trees"},
+                {"title": "Love", "text": "I love you"},
+                {"title": "Water", "text": "waves and sea"}
+            ]
+            
+            analyses = analyzer.analyze_multiple_poems(poems)
+            
+            assert len(analyses) == 3
+            assert all(analysis["has_themes"] for analysis in analyses)
     
-    def test_get_combined_q_codes(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_get_combined_q_codes(self, mock_openai_analyzer_module):
         """Test getting combined Q-codes from multiple analyses."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poems = [
-            {"title": "Nature", "text": "flowers and trees"},
-            {"title": "Love", "text": "I love you"}
-        ]
-        
-        analyses = analyzer.analyze_multiple_poems(poems)
-        combined_q_codes = analyzer.get_combined_q_codes(analyses)
-        
-        assert len(combined_q_codes) > 0
-        assert all(q_code.startswith("Q") for q_code in combined_q_codes)
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poems = [
+                {"title": "Nature", "text": "flowers and trees"},
+                {"title": "Love", "text": "I love you"}
+            ]
+            
+            analyses = analyzer.analyze_multiple_poems(poems)
+            combined_q_codes = analyzer.get_combined_q_codes(analyses)
+            
+            assert len(combined_q_codes) > 0
+            assert all(q_code.startswith("Q") for q_code in combined_q_codes)
 
 
 class TestUtilityMethods:
@@ -381,16 +414,19 @@ class TestUtilityMethods:
         assert len(summary) > 0
         assert "nature" in summary.lower() or "flowers" in summary.lower()
     
-    def test_get_theme_summary_no_themes(self):
+    @patch('src.poem_analyzer.openai_analyzer')
+    def test_get_theme_summary_no_themes(self, mock_openai_analyzer_module):
         """Test getting theme summary when no themes detected."""
-        analyzer = poem_analyzer.PoemAnalyzer()
-        
-        poem = {"title": "Abstract", "text": "complex concepts"}
-        
-        analysis = analyzer.analyze_poem(poem)
-        summary = analyzer.get_theme_summary(analysis)
-        
-        assert summary == "No themes detected"
+        # Mock openai_analyzer to be None so AI analysis is skipped
+        with patch.object(poem_analyzer, 'openai_analyzer', None):
+            analyzer = poem_analyzer.PoemAnalyzer()
+            
+            poem = {"title": "Abstract", "text": "complex concepts"}
+            
+            analysis = analyzer.analyze_poem(poem)
+            summary = analyzer.get_theme_summary(analysis)
+            
+            assert summary == "No themes detected"
 
 
 class TestPerformance:
