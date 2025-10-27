@@ -47,7 +47,7 @@ jobs:
       
     - name: Run unit tests
       run: |
-        pytest -v --tb=short --durations=10
+        pytest -v --tb=short --durations=10 --maxfail=3
         
     - name: Run tests with coverage
       run: |
