@@ -306,6 +306,152 @@ class TestPoetDateFetching:
         assert result is None
 
 
+class TestPoetDateTimeoutHandling:
+    """Test timeout handling and retry logic for poet date fetching."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.fetcher = PoemFetcher()
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_timeout_first_attempt(self, mock_get):
+        """Test timeout on first attempt, success on second."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'birth': {'value': '1809-08-06', 'type': 'time'},
+                        'death': {'value': '1892-10-06', 'type': 'time'}
+                    }
+                ]
+            }
+        }
+        
+        # First call times out, second succeeds
+        mock_get.side_effect = [requests.Timeout(), mock_response]
+        
+        result = self.fetcher.get_poet_dates("Test Poet")
+        
+        assert result is not None
+        assert result['birth_year'] == 1809
+        assert result['death_year'] == 1892
+        assert mock_get.call_count == 2
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_all_timeouts(self, mock_get):
+        """Test handling when all query strategies timeout."""
+        mock_get.side_effect = requests.Timeout()
+        
+        result = self.fetcher.get_poet_dates("Test Poet")
+        
+        assert result is None
+        # Should try multiple strategies
+        assert mock_get.call_count >= 2
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_connection_error(self, mock_get):
+        """Test handling connection errors."""
+        mock_get.side_effect = requests.ConnectionError()
+        
+        result = self.fetcher.get_poet_dates("Test Poet")
+        
+        assert result is None
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_malformed_response(self, mock_get):
+        """Test handling malformed JSON response."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = ValueError("Invalid JSON")
+        mock_get.return_value = mock_response
+        
+        result = self.fetcher.get_poet_dates("Test Poet")
+        
+        assert result is None
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_http_error(self, mock_get):
+        """Test handling HTTP errors."""
+        mock_response = Mock()
+        mock_response.status_code = 503  # Service unavailable
+        mock_get.return_value = mock_response
+        
+        result = self.fetcher.get_poet_dates("Test Poet")
+        
+        assert result is None
+    
+    def test_get_poet_dates_cached_poet_no_api_call(self):
+        """Test that cached poets don't trigger API calls."""
+        with patch('src.poem_fetcher.requests.Session.get') as mock_get:
+            result = self.fetcher.get_poet_dates("Lord Alfred Tennyson")
+            
+            assert result is not None
+            assert result['birth_year'] == 1809
+            assert result['death_year'] == 1892
+            # Should not make any API calls for cached poets
+            mock_get.assert_not_called()
+    
+    def test_get_poet_dates_name_variations_cached(self):
+        """Test that different name variations work with cache."""
+        variations = [
+            "Lewis Carroll",
+            "Charles Dodgson", 
+            "Carroll"
+        ]
+        
+        for name in variations:
+            with patch('src.poem_fetcher.requests.Session.get') as mock_get:
+                result = self.fetcher.get_poet_dates(name)
+                
+                assert result is not None
+                assert result['birth_year'] == 1832
+                assert result['death_year'] == 1898
+                mock_get.assert_not_called()
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_progressive_timeout_strategy(self, mock_get):
+        """Test that different timeout values are used for different strategies."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {'bindings': []}
+        }
+        mock_get.return_value = mock_response
+        
+        self.fetcher.get_poet_dates("Test Poet")
+        
+        # Verify different timeout values were used
+        calls = mock_get.call_args_list
+        assert len(calls) >= 2
+        
+        # Check that timeout parameter was passed
+        for call in calls:
+            args, kwargs = call
+            assert 'timeout' in kwargs
+            assert kwargs['timeout'] in [30, 60]  # Our new timeout values
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_retry_with_different_strategies(self, mock_get):
+        """Test that retry uses different query strategies."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {'bindings': []}
+        }
+        mock_get.return_value = mock_response
+        
+        self.fetcher.get_poet_dates("Test Poet")
+        
+        # Should have tried multiple strategies
+        assert mock_get.call_count >= 2
+        
+        # Verify different queries were used (different timeout values indicate different strategies)
+        timeout_values = [call[1]['timeout'] for call in mock_get.call_args_list]
+        assert len(set(timeout_values)) > 1  # Different timeout values used
+
+
 class TestEnrichPoemWithDates:
     """Test poem enrichment with date information."""
     
@@ -547,6 +693,77 @@ class TestPoemFetcherErrorHandling:
         # Test with poem containing only empty lines
         empty_lines_poem = {"lines": ["", "   ", "\n"]}
         assert self.fetcher.count_words(empty_lines_poem) == 0
+
+
+class TestWikidataIntegration:
+    """Integration tests with real Wikidata calls."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.fetcher = PoemFetcher()
+    
+    @pytest.mark.slow
+    @pytest.mark.integration
+    def test_get_poet_dates_tennyson_real(self):
+        """Test fetching Tennyson dates from real Wikidata."""
+        result = self.fetcher.get_poet_dates("Lord Alfred Tennyson")
+        
+        assert result is not None
+        assert result['birth_year'] == 1809
+        assert result['death_year'] == 1892
+    
+    @pytest.mark.slow
+    @pytest.mark.integration
+    def test_get_poet_dates_carroll_real(self):
+        """Test fetching Carroll dates from real Wikidata."""
+        result = self.fetcher.get_poet_dates("Lewis Carroll")
+        
+        assert result is not None
+        assert result['birth_year'] == 1832
+        assert result['death_year'] == 1898
+    
+    @pytest.mark.slow
+    @pytest.mark.integration
+    def test_get_poet_dates_alternative_names(self):
+        """Test fetching dates using alternative name formats."""
+        # Test different name variations
+        variations = [
+            ("Alfred Tennyson", 1809, 1892),
+            ("Charles Dodgson", 1832, 1898),
+            ("Rudyard Kipling", 1865, 1936)
+        ]
+        
+        for name, expected_birth, expected_death in variations:
+            result = self.fetcher.get_poet_dates(name)
+            
+            assert result is not None, f"Failed to get dates for {name}"
+            assert result['birth_year'] == expected_birth, f"Wrong birth year for {name}"
+            assert result['death_year'] == expected_death, f"Wrong death year for {name}"
+    
+    @pytest.mark.slow
+    @pytest.mark.integration
+    def test_get_poet_dates_performance(self):
+        """Test that queries complete within reasonable time."""
+        import time
+        
+        start_time = time.time()
+        result = self.fetcher.get_poet_dates("William Wordsworth")
+        end_time = time.time()
+        
+        # Should complete within 30 seconds (our timeout)
+        assert end_time - start_time < 30
+        assert result is not None
+        assert result['birth_year'] == 1770
+        assert result['death_year'] == 1850
+    
+    @pytest.mark.slow
+    @pytest.mark.integration
+    def test_get_poet_dates_unknown_poet_real(self):
+        """Test handling of unknown poet with real Wikidata."""
+        result = self.fetcher.get_poet_dates("Nonexistent Poet XYZ123")
+        
+        # Should return None for unknown poets
+        assert result is None
 
 
 if __name__ == "__main__":

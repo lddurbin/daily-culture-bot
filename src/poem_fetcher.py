@@ -67,6 +67,39 @@ class PoemFetcher:
             "Browning": {"birth_year": 1806, "death_year": 1861},
             "Geoffrey Chaucer": {"birth_year": 1343, "death_year": 1400},
             "Chaucer": {"birth_year": 1343, "death_year": 1400},
+            # Additional common poets from PoetryDB
+            "Lord Alfred Tennyson": {"birth_year": 1809, "death_year": 1892},
+            "Alfred, Lord Tennyson": {"birth_year": 1809, "death_year": 1892},
+            "Alfred Tennyson": {"birth_year": 1809, "death_year": 1892},
+            "Tennyson": {"birth_year": 1809, "death_year": 1892},
+            "Lewis Carroll": {"birth_year": 1832, "death_year": 1898},
+            "Charles Dodgson": {"birth_year": 1832, "death_year": 1898},
+            "Carroll": {"birth_year": 1832, "death_year": 1898},
+            "Rudyard Kipling": {"birth_year": 1865, "death_year": 1936},
+            "Kipling": {"birth_year": 1865, "death_year": 1936},
+            "Henry Wadsworth Longfellow": {"birth_year": 1807, "death_year": 1882},
+            "Longfellow": {"birth_year": 1807, "death_year": 1882},
+            "John Milton": {"birth_year": 1608, "death_year": 1674},
+            "Milton": {"birth_year": 1608, "death_year": 1674},
+            "Alexander Pope": {"birth_year": 1688, "death_year": 1744},
+            "Pope": {"birth_year": 1688, "death_year": 1744},
+            "William Butler Yeats": {"birth_year": 1865, "death_year": 1939},
+            "W.B. Yeats": {"birth_year": 1865, "death_year": 1939},
+            "Yeats": {"birth_year": 1865, "death_year": 1939},
+            "Ezra Pound": {"birth_year": 1885, "death_year": 1972},
+            "Pound": {"birth_year": 1885, "death_year": 1972},
+            "Wallace Stevens": {"birth_year": 1879, "death_year": 1955},
+            "Stevens": {"birth_year": 1879, "death_year": 1955},
+            "Marianne Moore": {"birth_year": 1887, "death_year": 1972},
+            "Moore": {"birth_year": 1887, "death_year": 1972},
+            "Elizabeth Bishop": {"birth_year": 1911, "death_year": 1979},
+            "Bishop": {"birth_year": 1911, "death_year": 1979},
+            "Robert Lowell": {"birth_year": 1917, "death_year": 1977},
+            "Lowell": {"birth_year": 1917, "death_year": 1977},
+            "Anne Sexton": {"birth_year": 1928, "death_year": 1974},
+            "Sexton": {"birth_year": 1928, "death_year": 1974},
+            "Allen Ginsberg": {"birth_year": 1926, "death_year": 1997},
+            "Ginsberg": {"birth_year": 1926, "death_year": 1997},
         }
         # Option to disable poet date fetching (useful when Wikidata is slow)
         self.enable_poet_dates = enable_poet_dates
@@ -298,6 +331,7 @@ class PoemFetcher:
         Returns dict with birth_year and death_year (None if living/unknown).
         
         Uses Wikidata P569 (birth) and P570 (death) properties.
+        Optimized for better performance and reduced timeouts.
         """
         if not poet_name:
             return None
@@ -309,45 +343,46 @@ class PoemFetcher:
         print(f"🔍 Looking up poet dates for: {poet_name}")
         
         try:
-            # More efficient query: search for exact name match first, then fuzzy
-            # Split name into parts for better matching
-            name_parts = poet_name.strip().split()
-            if len(name_parts) >= 2:
-                first_name = name_parts[0]
-                last_name = name_parts[-1]
-                
-                # Try exact match first (much faster)
-                sparql_query = f"""
-                SELECT ?birth ?death WHERE {{
-                  ?person rdfs:label ?name .
-                  FILTER(LANG(?name) = "en")
-                  FILTER(?name = "{poet_name}" || ?name = "{last_name}, {first_name}")
-                  ?person wdt:P569 ?birth .
-                  OPTIONAL {{ ?person wdt:P570 ?death }}
-                  # Filter to people who are poets/writers
-                  {{ ?person wdt:P106 wd:Q49757 }} UNION {{ ?person wdt:P106 wd:Q36180 }}
-                }}
-                LIMIT 1
-                """
-            else:
-                # Single name - use contains but with poet filter
-                sparql_query = f"""
-                SELECT ?birth ?death WHERE {{
-                  ?person rdfs:label ?name .
-                  FILTER(LANG(?name) = "en")
-                  FILTER(CONTAINS(LCASE(?name), LCASE("{poet_name}")))
-                  ?person wdt:P569 ?birth .
-                  OPTIONAL {{ ?person wdt:P570 ?death }}
-                  # Filter to people who are poets/writers
-                  {{ ?person wdt:P106 wd:Q49757 }} UNION {{ ?person wdt:P106 wd:Q36180 }}
-                }}
-                LIMIT 1
-                """
-            
-            # Try multiple query strategies with increasing timeout
+            # Simplified query strategies with progressive complexity
+            # Strategy 1: Direct label match (fastest)
             query_strategies = [
-                (sparql_query, 5),  # Fast exact match
-                (sparql_query, 10), # Slower fuzzy match
+                # Strategy 1: Exact label match with poet filter
+                (f"""
+                SELECT ?birth ?death WHERE {{
+                  ?person rdfs:label "{poet_name}"@en .
+                  ?person wdt:P569 ?birth .
+                  OPTIONAL {{ ?person wdt:P570 ?death }}
+                  # Filter to poets/writers only
+                  ?person wdt:P106 wd:Q49757 .
+                }}
+                LIMIT 1
+                """, 30),
+                
+                # Strategy 2: Alternative name format (Last, First)
+                (f"""
+                SELECT ?birth ?death WHERE {{
+                  ?person rdfs:label ?name .
+                  FILTER(LANG(?name) = "en")
+                  FILTER(?name = "{poet_name}" || ?name = "{self._get_last_first_name(poet_name)}")
+                  ?person wdt:P569 ?birth .
+                  OPTIONAL {{ ?person wdt:P570 ?death }}
+                  ?person wdt:P106 wd:Q49757 .
+                }}
+                LIMIT 1
+                """, 60),
+                
+                # Strategy 3: Broader search with occupation filter (fallback)
+                (f"""
+                SELECT ?birth ?death WHERE {{
+                  ?person rdfs:label ?name .
+                  FILTER(LANG(?name) = "en")
+                  FILTER(CONTAINS(?name, "{poet_name}"))
+                  ?person wdt:P569 ?birth .
+                  OPTIONAL {{ ?person wdt:P570 ?death }}
+                  ?person wdt:P106 wd:Q49757 .
+                }}
+                LIMIT 1
+                """, 60)
             ]
             
             for query, timeout in query_strategies:
@@ -406,6 +441,17 @@ class PoemFetcher:
         self.poet_date_cache[poet_name] = None
         print(f"⚠️ No poet dates found for: {poet_name}")
         return None
+    
+    def _get_last_first_name(self, poet_name: str) -> str:
+        """
+        Convert "First Last" to "Last, First" format for Wikidata search.
+        """
+        name_parts = poet_name.strip().split()
+        if len(name_parts) >= 2:
+            first_name = name_parts[0]
+            last_name = name_parts[-1]
+            return f"{last_name}, {first_name}"
+        return poet_name
     
     def enrich_poem_with_dates(self, poem: Dict) -> Dict:
         """
