@@ -51,7 +51,14 @@ class ConcreteElementExtractor:
             
         Returns:
             Dictionary with categorized nouns
+            
+        Raises:
+            ValueError: If poem_text is not a string
         """
+        # Validate input type
+        if poem_text is not None and not isinstance(poem_text, str):
+            raise ValueError("poem_text must be a string")
+        
         if not self.nlp or not poem_text:
             return {
                 "natural_objects": [],
