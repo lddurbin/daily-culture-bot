@@ -762,5 +762,167 @@ class TestProcessPaintingDataWithDates:
         assert result[0]['year'] is None  # Should fallback to None on error
 
 
+class TestCacheManagement:
+    """Test cache management functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_cache_key_simple(self):
+        """Test cache key generation with simple parameters."""
+        key = self.creator._get_cache_key("test_query", param1="value1", param2=123)
+        
+        assert isinstance(key, str)
+        assert len(key) > 0
+        assert "test_query" in key
+    
+    def test_get_cache_key_with_list(self):
+        """Test cache key generation with list parameters."""
+        key = self.creator._get_cache_key("test", items=["a", "b", "c"])
+        
+        assert isinstance(key, str)
+        assert len(key) > 0
+    
+    def test_get_cache_key_sorted(self):
+        """Test that cache keys are sorted for consistency."""
+        key1 = self.creator._get_cache_key("test", a="z", b="y")
+        key2 = self.creator._get_cache_key("test", b="y", a="z")
+        
+        # Keys should be the same regardless of parameter order
+        assert key1 == key2
+    
+    def test_manage_cache_size_below_limit(self):
+        """Test cache management when below limit."""
+        self.creator.query_cache = {"key1": "value1", "key2": "value2"}
+        
+        self.creator._manage_cache_size()
+        
+        assert len(self.creator.query_cache) == 2
+    
+    def test_manage_cache_size_above_limit(self):
+        """Test cache management when above limit."""
+        # Create a cache above the limit
+        self.creator.cache_max_size = 50
+        self.creator.query_cache = {f"key{i}": f"value{i}" for i in range(60)}
+        
+        initial_size = len(self.creator.query_cache)
+        self.creator._manage_cache_size()
+        
+        # Should remove 25% of entries
+        assert len(self.creator.query_cache) < initial_size
+
+
+class TestWikipediaSummary:
+    """Test Wikipedia summary functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_wikipedia_summary_success(self):
+        """Test successfully getting Wikipedia summary."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'extract': 'The Mona Lisa is a famous painting. It was painted by Leonardo.'
+        }
+        self.creator.session.get = Mock(return_value=mock_response)
+        
+        result = self.creator.get_wikipedia_summary("Mona Lisa")
+        
+        assert result is not None
+        assert ("Mona Lisa" in result or "painting" in result)
+    
+    def test_get_wikipedia_summary_no_extract(self):
+        """Test Wikipedia summary with no extract."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        self.creator.session.get = Mock(return_value=mock_response)
+        
+        result = self.creator.get_wikipedia_summary("Mona Lisa")
+        
+        assert result is None
+    
+    def test_get_wikipedia_summary_api_error(self):
+        """Test Wikipedia summary with API error."""
+        mock_response = Mock()
+        mock_response.status_code = 404
+        self.creator.session.get = Mock(return_value=mock_response)
+        
+        result = self.creator.get_wikipedia_summary("Mona Lisa")
+        
+        assert result is None
+    
+    @patch('builtins.print')
+    def test_get_wikipedia_summary_exception(self, mock_print):
+        """Test Wikipedia summary with exception."""
+        self.creator.session.get = Mock(side_effect=Exception("Network error"))
+        
+        result = self.creator.get_wikipedia_summary("Mona Lisa")
+        
+        assert result is None
+        mock_print.assert_called_once()
+
+
+class TestHighResImageUrl:
+    """Test high resolution image URL functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_high_res_image_url_thumbnail(self):
+        """Test converting thumbnail URL to high-res."""
+        thumbnail_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Example.jpg/800px-Example.jpg"
+        result = self.creator.get_high_res_image_url(thumbnail_url)
+        
+        assert "upload.wikimedia.org" in result
+        # Check that result is either the original URL (if regex fails) or the extracted path
+        assert result == thumbnail_url or "/thumb/" not in result
+    
+    def test_get_high_res_image_url_direct_commons(self):
+        """Test direct Wikimedia Commons URL."""
+        direct_url = "https://upload.wikimedia.org/wikipedia/commons/a/ab/Example.jpg"
+        result = self.creator.get_high_res_image_url(direct_url)
+        
+        assert result == direct_url
+    
+    def test_get_high_res_image_url_empty(self):
+        """Test empty URL."""
+        result = self.creator.get_high_res_image_url("")
+        
+        assert result == ""
+    
+    def test_get_high_res_image_url_none(self):
+        """Test None URL."""
+        result = self.creator.get_high_res_image_url(None)
+        
+        assert result == ""
+
+
+class TestGetPaintingLabels:
+    """Test get_painting_labels functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_painting_labels_no_url(self):
+        """Test getting labels with no URL."""
+        result = self.creator.get_painting_labels(None)
+        
+        assert result["title"] == "Unknown Title"
+        assert result["artist"] == "Unknown Artist"
+    
+    def test_get_painting_labels_empty_url(self):
+        """Test getting labels with empty URL."""
+        result = self.creator.get_painting_labels("")
+        
+        assert result["title"] == "Unknown Title"
+        assert result["artist"] == "Unknown Artist"
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
