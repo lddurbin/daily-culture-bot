@@ -1,0 +1,7 @@
+# Global code owners - these users can approve any changes
+* @lddurbin
+
+# Specific file ownership (optional)
+# src/ @lddurbin
+# tests/ @lddurbin
+# .github/ @lddurbin

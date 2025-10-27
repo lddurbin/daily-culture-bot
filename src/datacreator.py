@@ -648,7 +648,8 @@ class PaintingDataCreator:
 
     def fetch_artwork_by_subject_with_scoring(self, poem_analysis: Dict, q_codes: List[str], count: int = 1, 
                                              genres: List[str] = None, min_score: float = 0.4, 
-                                             max_sitelinks: int = 20) -> List[Tuple[Dict, float]]:
+                                             max_sitelinks: int = 20, poet_birth_year: Optional[int] = None,
+                                             poet_death_year: Optional[int] = None) -> List[Tuple[Dict, float]]:
         """
         Fetch visual artwork matching specific subjects/themes and score them for quality.
         Uses progressive fallback with scoring: try scoring first, then fall back to un-scored matches.
@@ -660,6 +661,8 @@ class PaintingDataCreator:
             genres: Optional list of genre Q-codes to filter by
             min_score: Minimum match quality score (0.0-1.0)
             max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
+            poet_birth_year: Optional year poet was born (for era matching)
+            poet_death_year: Optional year poet died (for era matching)
             
         Returns:
             List of tuples (artwork_dict, score) sorted by score descending
@@ -723,78 +726,10 @@ class PaintingDataCreator:
                     print(f"⚠️ No results with {strategy['name']}, trying next strategy...")
                     continue
                 
-                # Process and score each artwork
-                scored_artwork = []
-                
-                for item in raw_data:
-                    try:
-                        # Get Wikidata URL and image first
-                        wikidata_url = item.get('artwork', {}).get('value', '')
-                        image_url = item.get('image', {}).get('value', '')
-                        sitelinks = item.get('sitelinks', {}).get('value', '0')
-                        subject = item.get('subject', {}).get('value', '')
-                        genre = item.get('genre', {}).get('value', '')
-                        artwork_type = item.get('artworkType', {}).get('value', '')
-                        
-                        if not wikidata_url or not image_url:
-                            continue
-                        
-                        # Get labels using a separate, simple query
-                        labels = self.get_painting_labels(wikidata_url)
-                        title = labels.get('title', 'Unknown Title')
-                        artist = labels.get('artist', 'Unknown Artist')
-                        
-                        # Skip if we don't have basic info
-                        if title == 'Unknown Title' or artist == 'Unknown Artist':
-                            continue
-                        
-                        # Process image URL
-                        if image_url:
-                            image_url = self.get_high_res_image_url(image_url)
-                        
-                        # Determine medium based on artwork type
-                        medium = self._get_medium_from_type(artwork_type)
-                        
-                        # Create artwork entry
-                        artwork_entry = {
-                            "title": self.clean_text(title),
-                            "artist": self.clean_text(artist),
-                            "image": image_url,
-                            "year": None,
-                            "style": "Classical",
-                            "museum": "Unknown Location",
-                            "origin": "Unknown",
-                            "medium": medium,
-                            "dimensions": "Unknown dimensions",
-                            "wikidata": wikidata_url,
-                            "date": datetime.now().strftime("%Y-%m-%d"),
-                            "sitelinks": int(sitelinks),
-                            "subject_q_codes": [subject] if subject else [],
-                            "genre_q_codes": [genre] if genre else [],
-                            "artwork_type": artwork_type
-                        }
-                        
-                        # Score the artwork using the analyzer
-                        score = analyzer.score_artwork_match(
-                            poem_analysis, 
-                            artwork_entry["subject_q_codes"], 
-                            artwork_entry["genre_q_codes"]
-                        )
-                        
-                        # Only include artwork that meets minimum score
-                        if score >= strategy["min_score"]:
-                            scored_artwork.append((artwork_entry, score))
-                            print(f"Scored: {title} by {artist} (score: {score:.2f})")
-                        
-                        # Add delay to be respectful to APIs
-                        time.sleep(0.5)
-                        
-                    except Exception as e:
-                        print(f"Error processing artwork data: {e}")
-                        continue
-                
-                # Sort by score descending
-                scored_artwork.sort(reverse=True, key=lambda x: x[1])
+                # Process and score each artwork using extracted method
+                scored_artwork = self._score_and_filter_artwork(
+                    raw_data, strategy, poem_analysis, genres, (poet_birth_year, poet_death_year), analyzer
+                )
                 
                 if scored_artwork:
                     print(f"✅ Found {len(scored_artwork)} artworks with {strategy['name']}")
@@ -811,6 +746,148 @@ class PaintingDataCreator:
         random_artwork = self.fetch_paintings(count=count, max_sitelinks=max_sitelinks)
         return [(art, 0.3) for art in random_artwork]  # Give low score for random
     
+    def _score_and_filter_artwork(self, raw_data: List[Dict], strategy: Dict, poem_analysis: Dict, 
+                                 genres: List[str], poet_years: Tuple[Optional[int], Optional[int]], 
+                                 analyzer) -> List[Tuple[Dict, float]]:
+        """
+        Process and score artwork from raw data using the given strategy.
+        
+        Args:
+            raw_data: List of raw Wikidata query results
+            strategy: Strategy dict with min_score and other parameters
+            poem_analysis: Poem analysis results for scoring
+            genres: List of genre Q-codes to filter by
+            poet_years: Tuple of (poet_birth_year, poet_death_year)
+            analyzer: PoemAnalyzer instance for scoring
+            
+        Returns:
+            List of tuples (artwork_entry, score) sorted by score descending
+        """
+        scored_artwork = []
+        poet_birth_year, poet_death_year = poet_years
+        
+        for item in raw_data:
+            try:
+                # Extract fields from raw data
+                fields = self._extract_artwork_fields_from_raw(item)
+                if not fields:
+                    continue
+                
+                # Build artwork entry from fields
+                artwork_entry = self._build_artwork_entry_from_fields(fields, fields['wikidata_url'])
+                if not artwork_entry:
+                    continue
+                
+                # Score the artwork using the analyzer with era information
+                score = analyzer.score_artwork_match(
+                    poem_analysis, 
+                    artwork_entry["subject_q_codes"], 
+                    artwork_entry["genre_q_codes"],
+                    artwork_year=artwork_entry.get('year'),
+                    poet_birth_year=poet_birth_year,
+                    poet_death_year=poet_death_year
+                )
+                
+                # Only include artwork that meets minimum score
+                if score >= strategy["min_score"]:
+                    scored_artwork.append((artwork_entry, score))
+                    print(f"Scored: {artwork_entry['title']} by {artwork_entry['artist']} (score: {score:.2f})")
+                
+                # Add delay to be respectful to APIs
+                time.sleep(0.5)
+                
+            except Exception as e:
+                print(f"Error processing artwork data: {e}")
+                continue
+        
+        # Sort by score descending
+        scored_artwork.sort(reverse=True, key=lambda x: x[1])
+        
+        return scored_artwork
+    
+    def _extract_artwork_fields_from_raw(self, raw_item: Dict) -> Optional[Dict]:
+        """
+        Extract artwork fields from raw Wikidata query result.
+        
+        Args:
+            raw_item: Raw item from Wikidata query result
+            
+        Returns:
+            Dict with extracted fields or None if validation fails
+        """
+        # Get Wikidata URL and image first
+        wikidata_url = raw_item.get('artwork', {}).get('value', '')
+        image_url = raw_item.get('image', {}).get('value', '')
+        sitelinks = raw_item.get('sitelinks', {}).get('value', '0')
+        subject = raw_item.get('subject', {}).get('value', '')
+        genre = raw_item.get('genre', {}).get('value', '')
+        artwork_type = raw_item.get('artworkType', {}).get('value', '')
+        
+        # Validate required fields
+        if not wikidata_url or not image_url:
+            return None
+        
+        return {
+            'wikidata_url': wikidata_url,
+            'image_url': image_url,
+            'sitelinks': sitelinks,
+            'subject': subject,
+            'genre': genre,
+            'artwork_type': artwork_type
+        }
+
+    def _build_artwork_entry_from_fields(self, fields: Dict, wikidata_url: str) -> Optional[Dict]:
+        """
+        Build complete artwork entry from extracted fields.
+        
+        Args:
+            fields: Dict with extracted artwork fields
+            wikidata_url: Wikidata URL for the artwork
+            
+        Returns:
+            Complete artwork entry dict or None if validation fails
+        """
+        # Get labels using a separate, simple query
+        labels = self.get_painting_labels(wikidata_url)
+        title = labels.get('title', 'Unknown Title')
+        artist = labels.get('artist', 'Unknown Artist')
+        
+        # Skip if we don't have basic info
+        if title == 'Unknown Title' or artist == 'Unknown Artist':
+            return None
+        
+        # Process image URL
+        image_url = fields['image_url']
+        if image_url:
+            image_url = self.get_high_res_image_url(image_url)
+        
+        # Determine medium based on artwork type
+        medium = self._get_medium_from_type(fields['artwork_type'])
+        
+        # Get artwork inception date (year)
+        artwork_year = self.get_artwork_inception_date(wikidata_url)
+        
+        # Create artwork entry
+        artwork_entry = {
+            "title": self.clean_text(title),
+            "artist": self.clean_text(artist),
+            "image": image_url,
+            "year": artwork_year,
+            "style": "Classical",
+            "museum": "Unknown Location",
+            "origin": "Unknown",
+            "medium": medium,
+            "dimensions": "Unknown dimensions",
+            "wikidata": wikidata_url,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "sitelinks": int(fields['sitelinks']),
+            "subject_q_codes": [fields['subject']] if fields['subject'] else [],
+            "genre_q_codes": [fields['genre']] if fields['genre'] else [],
+            "artwork_type": fields['artwork_type']
+        }
+        
+        return artwork_entry
+
     def _get_medium_from_type(self, artwork_type: str) -> str:
         """Get appropriate medium description from artwork type Q-code."""
         if wikidata_config:
@@ -946,51 +1023,5 @@ class PaintingDataCreator:
             print(f"Error appending to JSON: {e}")
 
 
-def main():
-    """
-    Main function to demonstrate the data creator functionality.
-    """
-    creator = PaintingDataCreator()
-    
-    print("Daily Painting Bot - Data Creator")
-    print("=" * 40)
-    print("Using combined license+age filter with random selection...")
-    
-    # Get user input for number of paintings (default to 1 for daily use)
-    try:
-        count = int(input("How many paintings would you like to fetch? (default: 1): ") or "1")
-    except ValueError:
-        count = 1
-    
-    # Fetch paintings with optimal settings
-    paintings = creator.fetch_paintings(count)  # Uses defaults: count=1, both filter, random order
-    
-    if paintings:
-        print(f"\nSuccessfully fetched {len(paintings)} painting{'s' if len(paintings) != 1 else ''}!")
-        
-        # Ask user what to do with the data
-        print("\nWhat would you like to do with the data?")
-        print("1. Save to new file (new_paintings.json)")
-        print("2. Append to existing paintings database")
-        print("3. Both")
-        
-        choice = input("Enter choice (1-3, default: 2): ").strip() or "2"
-        
-        if choice in ["1", "3"]:
-            creator.save_to_json(paintings, "new_paintings.json")
-        
-        if choice in ["2", "3"]:
-            creator.append_to_existing_json(paintings)
-        
-        print("\nSample of fetched data:")
-        for i, painting in enumerate(paintings[:3]):
-            print(f"\n{i+1}. {painting['title']} by {painting['artist']} ({painting['year']})")
-            print(f"   Style: {painting['style']}")
-            print(f"   Museum: {painting['museum']}")
-    
-    else:
-        print("No paintings were fetched. Please check your internet connection and try again.")
-
-
-if __name__ == "__main__":
-    main()
+# CLI entry point moved to daily_culture_bot.py
+# Use: python daily_culture_bot.py

@@ -2,6 +2,7 @@ import pytest
 import json
 import sys
 import os
+import requests
 from unittest.mock import Mock, patch, mock_open, MagicMock
 from datetime import datetime
 
@@ -760,6 +761,964 @@ class TestProcessPaintingDataWithDates:
         
         assert len(result) == 1
         assert result[0]['year'] is None  # Should fallback to None on error
+
+
+class TestCacheManagement:
+    """Test cache management functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_cache_key_simple(self):
+        """Test cache key generation with simple parameters."""
+        key = self.creator._get_cache_key("test_query", param1="value1", param2=123)
+        
+        assert isinstance(key, str)
+        assert len(key) > 0
+        assert "test_query" in key
+    
+    def test_get_cache_key_with_list(self):
+        """Test cache key generation with list parameters."""
+        key = self.creator._get_cache_key("test", items=["a", "b", "c"])
+        
+        assert isinstance(key, str)
+        assert len(key) > 0
+    
+    def test_get_cache_key_sorted(self):
+        """Test that cache keys are sorted for consistency."""
+        key1 = self.creator._get_cache_key("test", a="z", b="y")
+        key2 = self.creator._get_cache_key("test", b="y", a="z")
+        
+        # Keys should be the same regardless of parameter order
+        assert key1 == key2
+    
+    def test_manage_cache_size_below_limit(self):
+        """Test cache management when below limit."""
+        self.creator.query_cache = {"key1": "value1", "key2": "value2"}
+        
+        self.creator._manage_cache_size()
+        
+        assert len(self.creator.query_cache) == 2
+    
+    def test_manage_cache_size_above_limit(self):
+        """Test cache management when above limit."""
+        # Create a cache above the limit
+        self.creator.cache_max_size = 50
+        self.creator.query_cache = {f"key{i}": f"value{i}" for i in range(60)}
+        
+        initial_size = len(self.creator.query_cache)
+        self.creator._manage_cache_size()
+        
+        # Should remove 25% of entries
+        assert len(self.creator.query_cache) < initial_size
+
+
+class TestWikipediaSummary:
+    """Test Wikipedia summary functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_wikipedia_summary_success(self):
+        """Test successfully getting Wikipedia summary."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'extract': 'The Mona Lisa is a famous painting. It was painted by Leonardo.'
+        }
+        self.creator.session.get = Mock(return_value=mock_response)
+        
+        result = self.creator.get_wikipedia_summary("Mona Lisa")
+        
+        assert result is not None
+        assert ("Mona Lisa" in result or "painting" in result)
+    
+    def test_get_wikipedia_summary_no_extract(self):
+        """Test Wikipedia summary with no extract."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        self.creator.session.get = Mock(return_value=mock_response)
+        
+        result = self.creator.get_wikipedia_summary("Mona Lisa")
+        
+        assert result is None
+    
+    def test_get_wikipedia_summary_api_error(self):
+        """Test Wikipedia summary with API error."""
+        mock_response = Mock()
+        mock_response.status_code = 404
+        self.creator.session.get = Mock(return_value=mock_response)
+        
+        result = self.creator.get_wikipedia_summary("Mona Lisa")
+        
+        assert result is None
+    
+    @patch('builtins.print')
+    def test_get_wikipedia_summary_exception(self, mock_print):
+        """Test Wikipedia summary with exception."""
+        self.creator.session.get = Mock(side_effect=Exception("Network error"))
+        
+        result = self.creator.get_wikipedia_summary("Mona Lisa")
+        
+        assert result is None
+        mock_print.assert_called_once()
+
+
+class TestHighResImageUrl:
+    """Test high resolution image URL functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_high_res_image_url_thumbnail(self):
+        """Test converting thumbnail URL to high-res."""
+        thumbnail_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Example.jpg/800px-Example.jpg"
+        result = self.creator.get_high_res_image_url(thumbnail_url)
+        
+        assert "upload.wikimedia.org" in result
+        # Check that result is either the original URL (if regex fails) or the extracted path
+        assert result == thumbnail_url or "/thumb/" not in result
+    
+    def test_get_high_res_image_url_direct_commons(self):
+        """Test direct Wikimedia Commons URL."""
+        direct_url = "https://upload.wikimedia.org/wikipedia/commons/a/ab/Example.jpg"
+        result = self.creator.get_high_res_image_url(direct_url)
+        
+        assert result == direct_url
+    
+    def test_get_high_res_image_url_empty(self):
+        """Test empty URL."""
+        result = self.creator.get_high_res_image_url("")
+        
+        assert result == ""
+    
+    def test_get_high_res_image_url_none(self):
+        """Test None URL."""
+        result = self.creator.get_high_res_image_url(None)
+        
+        assert result == ""
+
+
+class TestGetPaintingLabels:
+    """Test get_painting_labels functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_painting_labels_no_url(self):
+        """Test getting labels with no URL."""
+        result = self.creator.get_painting_labels(None)
+        
+        assert result["title"] == "Unknown Title"
+        assert result["artist"] == "Unknown Artist"
+    
+    def test_get_painting_labels_empty_url(self):
+        """Test getting labels with empty URL."""
+        result = self.creator.get_painting_labels("")
+        
+        assert result["title"] == "Unknown Title"
+        assert result["artist"] == "Unknown Artist"
+
+
+class TestExtractArtworkFieldsFromRaw:
+    """Test _extract_artwork_fields_from_raw method."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_extract_fields_valid_data(self):
+        """Test extracting fields from valid raw data."""
+        raw_item = {
+            'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+            'sitelinks': {'value': '5'},
+            'subject': {'value': 'Q456'},
+            'genre': {'value': 'Q789'},
+            'artworkType': {'value': 'Q3305213'}
+        }
+        
+        result = self.creator._extract_artwork_fields_from_raw(raw_item)
+        
+        assert result is not None
+        assert result['wikidata_url'] == 'https://www.wikidata.org/wiki/Q123'
+        assert result['image_url'] == 'https://commons.wikimedia.org/wiki/File:test.jpg'
+        assert result['sitelinks'] == '5'
+        assert result['subject'] == 'Q456'
+        assert result['genre'] == 'Q789'
+        assert result['artwork_type'] == 'Q3305213'
+    
+    def test_extract_fields_missing_wikidata_url(self):
+        """Test extracting fields when wikidata_url is missing."""
+        raw_item = {
+            'artwork': {'value': ''},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+            'sitelinks': {'value': '5'},
+            'subject': {'value': 'Q456'},
+            'genre': {'value': 'Q789'},
+            'artworkType': {'value': 'Q3305213'}
+        }
+        
+        result = self.creator._extract_artwork_fields_from_raw(raw_item)
+        
+        assert result is None
+    
+    def test_extract_fields_missing_image_url(self):
+        """Test extracting fields when image_url is missing."""
+        raw_item = {
+            'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+            'image': {'value': ''},
+            'sitelinks': {'value': '5'},
+            'subject': {'value': 'Q456'},
+            'genre': {'value': 'Q789'},
+            'artworkType': {'value': 'Q3305213'}
+        }
+        
+        result = self.creator._extract_artwork_fields_from_raw(raw_item)
+        
+        assert result is None
+    
+    def test_extract_fields_missing_optional_fields(self):
+        """Test extracting fields when optional fields are missing."""
+        raw_item = {
+            'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+            'sitelinks': {'value': '5'},
+            'subject': {'value': ''},
+            'genre': {'value': ''},
+            'artworkType': {'value': ''}
+        }
+        
+        result = self.creator._extract_artwork_fields_from_raw(raw_item)
+        
+        assert result is not None
+        assert result['wikidata_url'] == 'https://www.wikidata.org/wiki/Q123'
+        assert result['image_url'] == 'https://commons.wikimedia.org/wiki/File:test.jpg'
+        assert result['sitelinks'] == '5'
+        assert result['subject'] == ''
+        assert result['genre'] == ''
+        assert result['artwork_type'] == ''
+    
+    def test_extract_fields_missing_keys(self):
+        """Test extracting fields when keys are missing from raw item."""
+        raw_item = {
+            'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'}
+        }
+        
+        result = self.creator._extract_artwork_fields_from_raw(raw_item)
+        
+        assert result is not None
+        assert result['wikidata_url'] == 'https://www.wikidata.org/wiki/Q123'
+        assert result['image_url'] == 'https://commons.wikimedia.org/wiki/File:test.jpg'
+        assert result['sitelinks'] == '0'  # Default value
+        assert result['subject'] == ''
+        assert result['genre'] == ''
+        assert result['artwork_type'] == ''
+    
+    def test_extract_fields_empty_raw_item(self):
+        """Test extracting fields from empty raw item."""
+        raw_item = {}
+        
+        result = self.creator._extract_artwork_fields_from_raw(raw_item)
+        
+        assert result is None
+
+
+class TestBuildArtworkEntryFromFields:
+    """Test _build_artwork_entry_from_fields method."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    @patch('src.datacreator.datetime')
+    def test_build_entry_valid_fields(self, mock_datetime):
+        """Test building artwork entry from valid fields."""
+        mock_datetime.now.return_value.strftime.return_value = "2024-01-01"
+        
+        fields = {
+            'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+            'image_url': 'https://commons.wikimedia.org/wiki/File:test.jpg',
+            'sitelinks': '5',
+            'subject': 'Q456',
+            'genre': 'Q789',
+            'artwork_type': 'Q3305213'
+        }
+        
+        with patch.object(self.creator, 'get_painting_labels') as mock_labels, \
+             patch.object(self.creator, 'get_high_res_image_url') as mock_high_res, \
+             patch.object(self.creator, '_get_medium_from_type') as mock_medium, \
+             patch.object(self.creator, 'get_artwork_inception_date') as mock_date, \
+             patch.object(self.creator, 'clean_text') as mock_clean:
+            
+            mock_labels.return_value = {'title': 'Test Painting', 'artist': 'Test Artist'}
+            mock_high_res.return_value = 'https://commons.wikimedia.org/wiki/File:test_high_res.jpg'
+            mock_medium.return_value = 'Oil on canvas'
+            mock_date.return_value = 1900
+            mock_clean.side_effect = lambda x: x  # Return as-is
+            
+            result = self.creator._build_artwork_entry_from_fields(fields, fields['wikidata_url'])
+            
+            assert result is not None
+            assert result['title'] == 'Test Painting'
+            assert result['artist'] == 'Test Artist'
+            assert result['image'] == 'https://commons.wikimedia.org/wiki/File:test_high_res.jpg'
+            assert result['year'] == 1900
+            assert result['style'] == 'Classical'
+            assert result['museum'] == 'Unknown Location'
+            assert result['origin'] == 'Unknown'
+            assert result['medium'] == 'Oil on canvas'
+            assert result['dimensions'] == 'Unknown dimensions'
+            assert result['wikidata'] == 'https://www.wikidata.org/wiki/Q123'
+            assert result['date'] == '2024-01-01'
+            assert result['sitelinks'] == 5
+            assert result['subject_q_codes'] == ['Q456']
+            assert result['genre_q_codes'] == ['Q789']
+            assert result['artwork_type'] == 'Q3305213'
+    
+    def test_build_entry_unknown_title(self):
+        """Test building entry when title is unknown."""
+        fields = {
+            'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+            'image_url': 'https://commons.wikimedia.org/wiki/File:test.jpg',
+            'sitelinks': '5',
+            'subject': 'Q456',
+            'genre': 'Q789',
+            'artwork_type': 'Q3305213'
+        }
+        
+        with patch.object(self.creator, 'get_painting_labels') as mock_labels:
+            mock_labels.return_value = {'title': 'Unknown Title', 'artist': 'Test Artist'}
+            
+            result = self.creator._build_artwork_entry_from_fields(fields, fields['wikidata_url'])
+            
+            assert result is None
+    
+    def test_build_entry_unknown_artist(self):
+        """Test building entry when artist is unknown."""
+        fields = {
+            'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+            'image_url': 'https://commons.wikimedia.org/wiki/File:test.jpg',
+            'sitelinks': '5',
+            'subject': 'Q456',
+            'genre': 'Q789',
+            'artwork_type': 'Q3305213'
+        }
+        
+        with patch.object(self.creator, 'get_painting_labels') as mock_labels:
+            mock_labels.return_value = {'title': 'Test Painting', 'artist': 'Unknown Artist'}
+            
+            result = self.creator._build_artwork_entry_from_fields(fields, fields['wikidata_url'])
+            
+            assert result is None
+    
+    def test_build_entry_empty_subject_genre(self):
+        """Test building entry with empty subject and genre."""
+        fields = {
+            'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+            'image_url': 'https://commons.wikimedia.org/wiki/File:test.jpg',
+            'sitelinks': '5',
+            'subject': '',
+            'genre': '',
+            'artwork_type': 'Q3305213'
+        }
+        
+        with patch.object(self.creator, 'get_painting_labels') as mock_labels, \
+             patch.object(self.creator, 'get_high_res_image_url') as mock_high_res, \
+             patch.object(self.creator, '_get_medium_from_type') as mock_medium, \
+             patch.object(self.creator, 'get_artwork_inception_date') as mock_date, \
+             patch.object(self.creator, 'clean_text') as mock_clean:
+            
+            mock_labels.return_value = {'title': 'Test Painting', 'artist': 'Test Artist'}
+            mock_high_res.return_value = 'https://commons.wikimedia.org/wiki/File:test_high_res.jpg'
+            mock_medium.return_value = 'Oil on canvas'
+            mock_date.return_value = 1900
+            mock_clean.side_effect = lambda x: x
+            
+            result = self.creator._build_artwork_entry_from_fields(fields, fields['wikidata_url'])
+            
+            assert result is not None
+            assert result['subject_q_codes'] == []
+            assert result['genre_q_codes'] == []
+
+
+class TestScoreAndFilterArtwork:
+    """Test _score_and_filter_artwork method."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_score_and_filter_valid_data(self):
+        """Test scoring and filtering with valid data."""
+        raw_data = [
+            {
+                'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+                'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+                'sitelinks': {'value': '5'},
+                'subject': {'value': 'Q456'},
+                'genre': {'value': 'Q789'},
+                'artworkType': {'value': 'Q3305213'}
+            }
+        ]
+        
+        strategy = {'min_score': 0.5}
+        poem_analysis = {'themes': ['nature'], 'emotions': ['peaceful']}
+        genres = ['Q789']
+        poet_years = (1850, 1920)
+        
+        mock_analyzer = Mock()
+        mock_analyzer.score_artwork_match.return_value = 0.8
+        
+        with patch.object(self.creator, '_extract_artwork_fields_from_raw') as mock_extract, \
+             patch.object(self.creator, '_build_artwork_entry_from_fields') as mock_build, \
+             patch('src.datacreator.time.sleep'):
+            
+            mock_extract.return_value = {
+                'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+                'image_url': 'https://commons.wikimedia.org/wiki/File:test.jpg',
+                'sitelinks': '5',
+                'subject': 'Q456',
+                'genre': 'Q789',
+                'artwork_type': 'Q3305213'
+            }
+            
+            mock_build.return_value = {
+                'title': 'Test Painting',
+                'artist': 'Test Artist',
+                'subject_q_codes': ['Q456'],
+                'genre_q_codes': ['Q789'],
+                'year': 1900
+            }
+            
+            result = self.creator._score_and_filter_artwork(
+                raw_data, strategy, poem_analysis, genres, poet_years, mock_analyzer
+            )
+            
+            assert len(result) == 1
+            assert result[0][1] == 0.8  # Score
+            assert result[0][0]['title'] == 'Test Painting'
+    
+    def test_score_and_filter_below_min_score(self):
+        """Test scoring when artwork score is below minimum."""
+        raw_data = [
+            {
+                'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+                'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+                'sitelinks': {'value': '5'},
+                'subject': {'value': 'Q456'},
+                'genre': {'value': 'Q789'},
+                'artworkType': {'value': 'Q3305213'}
+            }
+        ]
+        
+        strategy = {'min_score': 0.8}
+        poem_analysis = {'themes': ['nature'], 'emotions': ['peaceful']}
+        genres = ['Q789']
+        poet_years = (1850, 1920)
+        
+        mock_analyzer = Mock()
+        mock_analyzer.score_artwork_match.return_value = 0.3  # Below minimum
+        
+        with patch.object(self.creator, '_extract_artwork_fields_from_raw') as mock_extract, \
+             patch.object(self.creator, '_build_artwork_entry_from_fields') as mock_build, \
+             patch('src.datacreator.time.sleep'):
+            
+            mock_extract.return_value = {
+                'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+                'image_url': 'https://commons.wikimedia.org/wiki/File:test.jpg',
+                'sitelinks': '5',
+                'subject': 'Q456',
+                'genre': 'Q789',
+                'artwork_type': 'Q3305213'
+            }
+            
+            mock_build.return_value = {
+                'title': 'Test Painting',
+                'artist': 'Test Artist',
+                'subject_q_codes': ['Q456'],
+                'genre_q_codes': ['Q789'],
+                'year': 1900
+            }
+            
+            result = self.creator._score_and_filter_artwork(
+                raw_data, strategy, poem_analysis, genres, poet_years, mock_analyzer
+            )
+            
+            assert len(result) == 0  # No results due to low score
+    
+    def test_score_and_filter_invalid_fields(self):
+        """Test scoring when field extraction fails."""
+        raw_data = [
+            {
+                'artwork': {'value': ''},  # Invalid - empty URL
+                'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+                'sitelinks': {'value': '5'},
+                'subject': {'value': 'Q456'},
+                'genre': {'value': 'Q789'},
+                'artworkType': {'value': 'Q3305213'}
+            }
+        ]
+        
+        strategy = {'min_score': 0.5}
+        poem_analysis = {'themes': ['nature'], 'emotions': ['peaceful']}
+        genres = ['Q789']
+        poet_years = (1850, 1920)
+        
+        mock_analyzer = Mock()
+        
+        with patch.object(self.creator, '_extract_artwork_fields_from_raw') as mock_extract:
+            mock_extract.return_value = None  # Invalid fields
+            
+            result = self.creator._score_and_filter_artwork(
+                raw_data, strategy, poem_analysis, genres, poet_years, mock_analyzer
+            )
+            
+            assert len(result) == 0  # No results due to invalid fields
+    
+    def test_score_and_filter_invalid_entry(self):
+        """Test scoring when entry building fails."""
+        raw_data = [
+            {
+                'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+                'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+                'sitelinks': {'value': '5'},
+                'subject': {'value': 'Q456'},
+                'genre': {'value': 'Q789'},
+                'artworkType': {'value': 'Q3305213'}
+            }
+        ]
+        
+        strategy = {'min_score': 0.5}
+        poem_analysis = {'themes': ['nature'], 'emotions': ['peaceful']}
+        genres = ['Q789']
+        poet_years = (1850, 1920)
+        
+        mock_analyzer = Mock()
+        
+        with patch.object(self.creator, '_extract_artwork_fields_from_raw') as mock_extract, \
+             patch.object(self.creator, '_build_artwork_entry_from_fields') as mock_build:
+            
+            mock_extract.return_value = {
+                'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+                'image_url': 'https://commons.wikimedia.org/wiki/File:test.jpg',
+                'sitelinks': '5',
+                'subject': 'Q456',
+                'genre': 'Q789',
+                'artwork_type': 'Q3305213'
+            }
+            
+            mock_build.return_value = None  # Invalid entry
+            
+            result = self.creator._score_and_filter_artwork(
+                raw_data, strategy, poem_analysis, genres, poet_years, mock_analyzer
+            )
+            
+            assert len(result) == 0  # No results due to invalid entry
+    
+    def test_score_and_filter_exception_handling(self):
+        """Test scoring when an exception occurs during processing."""
+        raw_data = [
+            {
+                'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+                'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+                'sitelinks': {'value': '5'},
+                'subject': {'value': 'Q456'},
+                'genre': {'value': 'Q789'},
+                'artworkType': {'value': 'Q3305213'}
+            }
+        ]
+        
+        strategy = {'min_score': 0.5}
+        poem_analysis = {'themes': ['nature'], 'emotions': ['peaceful']}
+        genres = ['Q789']
+        poet_years = (1850, 1920)
+        
+        mock_analyzer = Mock()
+        mock_analyzer.score_artwork_match.side_effect = Exception("Test error")
+        
+        with patch.object(self.creator, '_extract_artwork_fields_from_raw') as mock_extract, \
+             patch.object(self.creator, '_build_artwork_entry_from_fields') as mock_build, \
+             patch('src.datacreator.time.sleep'):
+            
+            mock_extract.return_value = {
+                'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+                'image_url': 'https://commons.wikimedia.org/wiki/File:test.jpg',
+                'sitelinks': '5',
+                'subject': 'Q456',
+                'genre': 'Q789',
+                'artwork_type': 'Q3305213'
+            }
+            
+            mock_build.return_value = {
+                'title': 'Test Painting',
+                'artist': 'Test Artist',
+                'subject_q_codes': ['Q456'],
+                'genre_q_codes': ['Q789'],
+                'year': 1900
+            }
+            
+            result = self.creator._score_and_filter_artwork(
+                raw_data, strategy, poem_analysis, genres, poet_years, mock_analyzer
+            )
+            
+            assert len(result) == 0  # No results due to exception
+    
+    def test_score_and_filter_multiple_items_sorted(self):
+        """Test scoring multiple items and sorting by score."""
+        raw_data = [
+            {
+                'artwork': {'value': 'https://www.wikidata.org/wiki/Q123'},
+                'image': {'value': 'https://commons.wikimedia.org/wiki/File:test1.jpg'},
+                'sitelinks': {'value': '5'},
+                'subject': {'value': 'Q456'},
+                'genre': {'value': 'Q789'},
+                'artworkType': {'value': 'Q3305213'}
+            },
+            {
+                'artwork': {'value': 'https://www.wikidata.org/wiki/Q124'},
+                'image': {'value': 'https://commons.wikimedia.org/wiki/File:test2.jpg'},
+                'sitelinks': {'value': '3'},
+                'subject': {'value': 'Q457'},
+                'genre': {'value': 'Q790'},
+                'artworkType': {'value': 'Q3305213'}
+            }
+        ]
+        
+        strategy = {'min_score': 0.5}
+        poem_analysis = {'themes': ['nature'], 'emotions': ['peaceful']}
+        genres = ['Q789']
+        poet_years = (1850, 1920)
+        
+        mock_analyzer = Mock()
+        mock_analyzer.score_artwork_match.side_effect = [0.9, 0.7]  # Different scores
+        
+        with patch.object(self.creator, '_extract_artwork_fields_from_raw') as mock_extract, \
+             patch.object(self.creator, '_build_artwork_entry_from_fields') as mock_build, \
+             patch('src.datacreator.time.sleep'):
+            
+            mock_extract.side_effect = [
+                {
+                    'wikidata_url': 'https://www.wikidata.org/wiki/Q123',
+                    'image_url': 'https://commons.wikimedia.org/wiki/File:test1.jpg',
+                    'sitelinks': '5',
+                    'subject': 'Q456',
+                    'genre': 'Q789',
+                    'artwork_type': 'Q3305213'
+                },
+                {
+                    'wikidata_url': 'https://www.wikidata.org/wiki/Q124',
+                    'image_url': 'https://commons.wikimedia.org/wiki/File:test2.jpg',
+                    'sitelinks': '3',
+                    'subject': 'Q457',
+                    'genre': 'Q790',
+                    'artwork_type': 'Q3305213'
+                }
+            ]
+            
+            mock_build.side_effect = [
+                {
+                    'title': 'Test Painting 1',
+                    'artist': 'Test Artist 1',
+                    'subject_q_codes': ['Q456'],
+                    'genre_q_codes': ['Q789'],
+                    'year': 1900
+                },
+                {
+                    'title': 'Test Painting 2',
+                    'artist': 'Test Artist 2',
+                    'subject_q_codes': ['Q457'],
+                    'genre_q_codes': ['Q790'],
+                    'year': 1910
+                }
+            ]
+            
+            result = self.creator._score_and_filter_artwork(
+                raw_data, strategy, poem_analysis, genres, poet_years, mock_analyzer
+            )
+            
+            assert len(result) == 2
+            # Should be sorted by score descending
+            assert result[0][1] == 0.9  # Higher score first
+            assert result[1][1] == 0.7  # Lower score second
+            assert result[0][0]['title'] == 'Test Painting 1'
+            assert result[1][0]['title'] == 'Test Painting 2'
+
+
+class TestGetPaintingDimensions:
+    """Test get_painting_dimensions method."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_dimensions_valid_response(self):
+        """Test getting dimensions with valid response."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'height': {'value': '100'},
+                        'width': {'value': '150'}
+                    }
+                ]
+            }
+        }
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_dimensions(wikidata_url)
+            
+            assert result == "100 cm × 150 cm"
+    
+    def test_get_dimensions_no_dimensions(self):
+        """Test getting dimensions when no dimensions in response."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'height': {'value': ''},
+                        'width': {'value': ''}
+                    }
+                ]
+            }
+        }
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_dimensions(wikidata_url)
+            
+            assert result == "Unknown dimensions"
+    
+    def test_get_dimensions_http_error(self):
+        """Test getting dimensions with HTTP error."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 500
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_dimensions(wikidata_url)
+            
+            assert result == "Unknown dimensions"
+    
+    def test_get_dimensions_timeout_exception(self):
+        """Test getting dimensions with timeout exception."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        with patch.object(self.creator.session, 'get', side_effect=requests.Timeout()):
+            result = self.creator.get_painting_dimensions(wikidata_url)
+            
+            assert result == "Unknown dimensions"
+    
+    def test_get_dimensions_malformed_json(self):
+        """Test getting dimensions with malformed JSON response."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = ValueError("Invalid JSON")
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_dimensions(wikidata_url)
+            
+            assert result == "Unknown dimensions"
+    
+    def test_get_dimensions_missing_wikidata_url(self):
+        """Test getting dimensions with missing wikidata URL."""
+        result = self.creator.get_painting_dimensions(None)
+        
+        assert result == "Unknown dimensions"
+    
+    def test_get_dimensions_empty_results(self):
+        """Test getting dimensions with empty results array."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': []
+            }
+        }
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_dimensions(wikidata_url)
+            
+            assert result == "Unknown dimensions"
+    
+    def test_get_dimensions_invalid_values(self):
+        """Test getting dimensions with invalid dimension values."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'height': {'value': None},
+                        'width': {'value': None}
+                    }
+                ]
+            }
+        }
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_dimensions(wikidata_url)
+            
+            assert result == "Unknown dimensions"
+
+
+class TestGetPaintingLabels:
+    """Test get_painting_labels method."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_get_labels_valid_response(self):
+        """Test getting labels with valid response."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'paintingLabel': {'value': 'The Starry Night'},
+                        'artistLabel': {'value': 'Vincent van Gogh'}
+                    }
+                ]
+            }
+        }
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_labels(wikidata_url)
+            
+            assert result['title'] == 'The Starry Night'
+            assert result['artist'] == 'Vincent van Gogh'
+    
+    def test_get_labels_partial_labels(self):
+        """Test getting labels with partial labels."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'paintingLabel': {'value': 'The Starry Night'},
+                        'artistLabel': {'value': ''}
+                    }
+                ]
+            }
+        }
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_labels(wikidata_url)
+            
+            assert result['title'] == 'The Starry Night'
+            assert result['artist'] == ''  # Empty string, not 'Unknown Artist'
+    
+    def test_get_labels_http_error(self):
+        """Test getting labels with HTTP error."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 500
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_labels(wikidata_url)
+            
+            assert result['title'] == 'Unknown Title'
+            assert result['artist'] == 'Unknown Artist'
+    
+    def test_get_labels_timeout_exception(self):
+        """Test getting labels with timeout exception."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        with patch.object(self.creator.session, 'get', side_effect=requests.Timeout()):
+            result = self.creator.get_painting_labels(wikidata_url)
+            
+            assert result['title'] == 'Unknown Title'
+            assert result['artist'] == 'Unknown Artist'
+    
+    def test_get_labels_malformed_response(self):
+        """Test getting labels with malformed response."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = ValueError("Invalid JSON")
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_labels(wikidata_url)
+            
+            assert result['title'] == 'Unknown Title'
+            assert result['artist'] == 'Unknown Artist'
+    
+    def test_get_labels_missing_wikidata_url(self):
+        """Test getting labels with missing wikidata URL."""
+        result = self.creator.get_painting_labels(None)
+        
+        assert result['title'] == 'Unknown Title'
+        assert result['artist'] == 'Unknown Artist'
+    
+    def test_get_labels_empty_results(self):
+        """Test getting labels with empty results array."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': []
+            }
+        }
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_labels(wikidata_url)
+            
+            assert result['title'] == 'Unknown Title'
+            assert result['artist'] == 'Unknown Artist'
+    
+    def test_get_labels_non_english_labels(self):
+        """Test getting labels with non-English labels."""
+        wikidata_url = "https://www.wikidata.org/wiki/Q123"
+        
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'paintingLabel': {'value': 'La Nuit Étoilée'},
+                        'artistLabel': {'value': 'Vincent van Gogh'}
+                    }
+                ]
+            }
+        }
+        
+        with patch.object(self.creator.session, 'get', return_value=mock_response):
+            result = self.creator.get_painting_labels(wikidata_url)
+            
+            assert result['title'] == 'La Nuit Étoilée'
+            assert result['artist'] == 'Vincent van Gogh'
 
 
 if __name__ == '__main__':

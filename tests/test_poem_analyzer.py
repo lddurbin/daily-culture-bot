@@ -801,5 +801,167 @@ class TestScoringSystem:
         assert score > 0.0
 
 
+class TestEraScoring:
+    """Test era-based scoring functionality."""
+    
+    def test_calculate_era_score_exact_match(self):
+        """Test era score calculation with artwork within poet's lifetime."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Poet lived 1800-1850, artwork from 1825 (within lifetime)
+        score = analyzer.calculate_era_score(1800, 1850, 1825)
+        
+        assert score is not None
+        assert score == 1.0  # Perfect match
+    
+    def test_calculate_era_score_at_lifetime_boundary(self):
+        """Test era score at the exact boundaries of poet's lifetime."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # At birth year
+        score_birth = analyzer.calculate_era_score(1800, 1850, 1800)
+        assert score_birth == 1.0
+        
+        # At death year
+        score_death = analyzer.calculate_era_score(1800, 1850, 1850)
+        assert score_death == 1.0
+    
+    def test_calculate_era_score_within_buffer_before(self):
+        """Test era score within buffer period before poet's birth."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Poet lived 1800-1850, artwork from 1760 (50 years before)
+        # Should score between 0.5 and 1.0 with linear decay
+        score = analyzer.calculate_era_score(1800, 1850, 1760)
+        
+        assert score is not None
+        assert 0.5 <= score < 1.0  # Within buffer range
+    
+    def test_calculate_era_score_within_buffer_after(self):
+        """Test era score within buffer period after poet's death."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Poet lived 1800-1850, artwork from 1870 (20 years after)
+        # Should score higher since closer to boundary
+        score = analyzer.calculate_era_score(1800, 1850, 1870)
+        
+        assert score is not None
+        assert 0.5 <= score < 1.0
+    
+    def test_calculate_era_score_outside_buffer(self):
+        """Test era score outside buffer period."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Poet lived 1800-1850, artwork from 1950 (100 years after)
+        score = analyzer.calculate_era_score(1800, 1850, 1950)
+        
+        assert score is not None
+        assert score == 0.0  # Outside buffer, no match
+    
+    def test_calculate_era_score_at_buffer_boundary(self):
+        """Test era score exactly at buffer boundary."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Poet lived 1800-1850, artwork from 1750 (50 years before, at boundary)
+        score = analyzer.calculate_era_score(1800, 1850, 1750)
+        
+        assert score is not None
+        assert score == 0.5  # At buffer boundary, should be 0.5
+        
+        # Artwork from 1900 (50 years after, at boundary)
+        score_after = analyzer.calculate_era_score(1800, 1850, 1900)
+        assert score_after == 0.5
+    
+    def test_calculate_era_score_linear_decay(self):
+        """Test that era score has linear decay within buffer."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Test multiple points within buffer
+        scores = []
+        for artwork_year in [1860, 1880, 1900]:  # 10, 30, 50 years after
+            score = analyzer.calculate_era_score(1800, 1850, artwork_year)
+            scores.append(score)
+        
+        # Scores should decrease as distance increases
+        assert scores[0] > scores[1] > scores[2]
+    
+    def test_calculate_era_score_missing_poet_dates(self):
+        """Test era score with missing poet dates."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        # Missing birth year
+        score1 = analyzer.calculate_era_score(None, 1850, 1800)
+        assert score1 is None
+        
+        # Missing death year
+        score2 = analyzer.calculate_era_score(1800, None, 1850)
+        assert score2 is None
+        
+        # Both missing
+        score3 = analyzer.calculate_era_score(None, None, 1800)
+        assert score3 is None
+    
+    def test_calculate_era_score_missing_artwork_date(self):
+        """Test era score with missing artwork date."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        score = analyzer.calculate_era_score(1800, 1850, None)
+        
+        assert score is None
+    
+    def test_integrated_era_scoring_with_visual_score(self):
+        """Test integrated scoring with both visual and era components."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "secondary_emotions": [],
+            "themes": ["nature"],
+            "emotional_tone": "playful",
+            "intensity": 5,
+            "avoid_subjects": []
+        }
+        
+        # Mock artwork with nature theme (visual match) and era match
+        nature_q_codes = analyzer.theme_mappings["nature"]["q_codes"]
+        
+        # Score with era component
+        # Poet: 1800-1850, Artwork: 1825 (perfect era match)
+        poet_birth_year = 1800
+        poet_death_year = 1850
+        artwork_year = 1825
+        
+        era_score = analyzer.calculate_era_score(poet_birth_year, poet_death_year, artwork_year)
+        assert era_score == 1.0
+        
+        # Visual score (should be ~0.3 for theme match)
+        visual_score = analyzer.score_artwork_match(poem_analysis, nature_q_codes, [])
+        
+        # Combined score: 80% visual + 20% era
+        combined_score = (visual_score * 0.8) + (era_score * 0.2)
+        
+        assert combined_score > visual_score  # Era should boost the score
+    
+    def test_integrated_era_scoring_without_dates(self):
+        """Test that scoring works when dates are missing (falls back to visual only)."""
+        analyzer = poem_analyzer.PoemAnalyzer()
+        
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "secondary_emotions": [],
+            "themes": ["nature"],
+            "emotional_tone": "playful",
+            "intensity": 5,
+            "avoid_subjects": []
+        }
+        
+        nature_q_codes = analyzer.theme_mappings["nature"]["q_codes"]
+        
+        # Without era data, should use visual score only
+        visual_score = analyzer.score_artwork_match(poem_analysis, nature_q_codes, [])
+        
+        assert visual_score > 0.0  # Should still have some visual match score
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
