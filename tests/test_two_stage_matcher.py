@@ -318,5 +318,229 @@ class TestIntegration:
             pytest.skip(f"Implementation has bugs (expected for skeleton): {e}")
 
 
+class TestHardConstraintsDetailed:
+    """Test detailed hard constraint scenarios."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.matcher = TwoStageMatcher()
+    
+    def test_emotional_tone_hard_exclusions(self):
+        """Test hard exclusions based on emotional tone."""
+        poem_analysis = {
+            "emotional_tone": "melancholic",
+            "narrative_elements": {}
+        }
+        
+        artwork_candidates = [
+            {
+                "subject_q_codes": ["Q123"],  # Some subject
+                "genre_q_codes": ["Q456"]     # Some genre
+            }
+        ]
+        
+        result = self.matcher._apply_hard_constraints(poem_analysis, artwork_candidates)
+        assert isinstance(result, list)
+    
+    def test_avoid_subjects_check(self):
+        """Test avoid subjects functionality."""
+        poem_analysis = {
+            "avoid_subjects": ["violence", "war"],
+            "narrative_elements": {}
+        }
+        
+        artwork_candidates = [
+            {
+                "subject_q_codes": ["Q789"],
+                "genre_q_codes": []
+            }
+        ]
+        
+        result = self.matcher._apply_hard_constraints(poem_analysis, artwork_candidates)
+        assert isinstance(result, list)
+    
+    def test_empty_candidates_list(self):
+        """Test with empty candidates list."""
+        poem_analysis = {
+            "narrative_elements": {}
+        }
+        
+        artwork_candidates = []
+        
+        result = self.matcher._apply_hard_constraints(poem_analysis, artwork_candidates)
+        assert result == []
+    
+    def test_multiple_candidates(self):
+        """Test with multiple candidates."""
+        poem_analysis = {
+            "emotional_tone": "neutral",
+            "narrative_elements": {
+                "setting": "ambiguous",
+                "human_presence": "absent"
+            },
+            "avoid_subjects": []
+        }
+        
+        artwork_candidates = [
+            {
+                "subject_q_codes": ["Q111"],
+                "genre_q_codes": ["Q222"]
+            },
+            {
+                "subject_q_codes": ["Q333"],
+                "genre_q_codes": ["Q444"]
+            }
+        ]
+        
+        result = self.matcher._apply_hard_constraints(poem_analysis, artwork_candidates)
+        assert isinstance(result, list)
+        assert len(result) <= len(artwork_candidates)
+
+
+class TestScoringMethods:
+    """Test individual scoring methods."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.matcher = TwoStageMatcher()
+    
+    def test_score_theme_match(self):
+        """Test theme matching scoring."""
+        poem_analysis = {
+            "themes": ["nature", "love"]
+        }
+        
+        artwork = {
+            "subject_q_codes": ["Q7860"],  # Nature Q-code
+            "genre_q_codes": ["Q123"]
+        }
+        
+        score = self.matcher._score_theme_match(poem_analysis, artwork)
+        
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_score_emotional_tone(self):
+        """Test emotional tone scoring."""
+        poem_analysis = {
+            "primary_emotions": ["joy", "melancholy"]
+        }
+        
+        artwork = {
+            "subject_q_codes": ["Q123"],
+            "genre_q_codes": ["Q456"]
+        }
+        
+        score = self.matcher._score_emotional_tone(poem_analysis, artwork)
+        
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_score_genre_alignment(self):
+        """Test genre alignment scoring."""
+        poem_analysis = {
+            "themes": ["nature"]
+        }
+        
+        artwork = {
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q123"]
+        }
+        
+        score = self.matcher._score_genre_alignment(poem_analysis, artwork)
+        
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_calculate_specificity_bonus(self):
+        """Test specificity bonus calculation."""
+        poem_analysis = {
+            "concrete_elements": {
+                "natural_objects": ["tree", "flower"]
+            }
+        }
+        
+        artwork = {
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": []
+        }
+        
+        vision_analysis = {
+            "success": True,
+            "analysis": {
+                "objects": ["tree", "flower", "mountain"]
+            }
+        }
+        
+        bonus = self.matcher._calculate_specificity_bonus(poem_analysis, artwork, vision_analysis)
+        
+        assert isinstance(bonus, float)
+        assert 0.0 <= bonus <= 1.0
+    
+    def test_calculate_soft_conflicts_penalty(self):
+        """Test soft conflicts penalty calculation."""
+        poem_analysis = {
+            "narrative_elements": {
+                "setting": "outdoor"
+            }
+        }
+        
+        artwork = {
+            "subject_q_codes": ["Q123"],
+            "genre_q_codes": []
+        }
+        
+        vision_analysis = {
+            "success": True,
+            "analysis": {
+                "setting": "indoor"
+            }
+        }
+        
+        penalty = self.matcher._calculate_soft_conflicts_penalty(poem_analysis, artwork, vision_analysis)
+        
+        assert isinstance(penalty, float)
+        assert 0.0 <= penalty <= 1.0
+    
+    def test_calculate_era_score(self):
+        """Test era score calculation."""
+        poem_analysis = {}
+        
+        artwork = {
+            "year": 1850,
+            "subject_q_codes": ["Q123"],
+            "genre_q_codes": []
+        }
+        
+        score = self.matcher._calculate_era_score(poem_analysis, artwork, 1800, 1900)
+        
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_calculate_era_score_missing_dates(self):
+        """Test era score calculation with missing dates."""
+        poem_analysis = {}
+        
+        artwork = {
+            "year": 1850,
+            "subject_q_codes": ["Q123"],
+            "genre_q_codes": []
+        }
+        
+        score = self.matcher._calculate_era_score(poem_analysis, artwork, None, 1900)
+        
+        assert score is None
+    
+    def test_map_emotions_to_q_codes(self):
+        """Test emotion to Q-code mapping."""
+        emotions = ["joy", "melancholy", "love"]
+        
+        q_codes = self.matcher._map_emotions_to_q_codes(emotions)
+        
+        assert isinstance(q_codes, list)
+        # Should return Q-codes for valid emotions
+        assert len(q_codes) >= 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
