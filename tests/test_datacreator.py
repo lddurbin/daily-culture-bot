@@ -1903,7 +1903,8 @@ class TestFetchArtworkBySubjectWithScoring:
     @patch('src.datacreator.POEM_ANALYZER_AVAILABLE', True)
     @patch('src.datacreator.poem_analyzer.PoemAnalyzer')
     @patch('src.datacreator.PaintingDataCreator.query_artwork_by_subject')
-    def test_fetch_artwork_by_subject_with_scoring_progressive_fallback(self, mock_query, mock_analyzer_class):
+    @patch('src.datacreator.PaintingDataCreator.fetch_paintings')
+    def test_fetch_artwork_by_subject_with_scoring_progressive_fallback(self, mock_fetch_paintings, mock_query, mock_analyzer_class):
         """Test progressive fallback strategies."""
         # Mock analyzer instance
         mock_analyzer = mock_analyzer_class.return_value
@@ -1911,6 +1912,9 @@ class TestFetchArtworkBySubjectWithScoring:
         
         # Mock query to return empty results initially, then results
         mock_query.side_effect = [[], [], [{'title': 'Fallback Artwork', 'image': 'fallback.jpg'}]]
+        
+        # Mock fetch_paintings to return a simple artwork for final fallback
+        mock_fetch_paintings.return_value = [{'title': 'Random Artwork', 'artist': 'Artist', 'image': 'test.jpg'}]
         
         poem_analysis = {'themes': ['nature'], 'mood': 'peaceful'}
         q_codes = ['Q1']
