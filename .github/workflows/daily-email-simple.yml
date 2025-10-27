@@ -4,7 +4,7 @@ on:
   schedule:
     # Run daily at 6:00 AM New Zealand time (NZDT = UTC+13, so 5pm UTC previous day)
     - cron: '0 17 * * *'
-  workflow_dispatch:  # Allow manual triggering
+  workflow_dispatch:
 
 jobs:
   send-daily-email:
@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           
       - name: Install dependencies
         run: |
@@ -26,38 +26,17 @@ jobs:
           
       - name: Send daily culture email
         env:
-          # SMTP Configuration - Set these as GitHub Secrets
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           SMTP_FROM_EMAIL: ${{ secrets.SMTP_FROM_EMAIL }}
-          # Email recipient - Set this as a GitHub Secret
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
-          # OpenAI API Key for enhanced poem analysis - Set this as a GitHub Secret
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          # Send complementary artwork and poem via email
-          # Features:
-          # - Era-based matching: Artwork selected from poet's lifetime (±50 years)
-          # - Enhanced AI analysis with quality scoring and fame filtering
-          # - Visual theme matching (80% weight) combined with era matching (20% weight)
-          # - Updated with Wikidata timeout fixes (30s/60s timeouts, expanded cache)
           python daily_culture_bot.py \
             --complementary \
             --email "$EMAIL_RECIPIENT" \
             --email-format html \
             --max-fame-level 20 \
             --min-match-score 0.4
-          
-      - name: Upload artifacts (optional)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: daily-culture-${{ github.run_number }}
-          path: |
-            artwork_*.json
-            poems_*.json
-            *.jpg
-            *.png
-          retention-days: 7

@@ -1,0 +1,46 @@
+name: Simple CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test & Validate
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run tests
+      run: |
+        pytest -v --tb=short --durations=5
+        
+    - name: Check coverage
+      run: |
+        pytest --cov=src --cov-report=term-missing --cov-fail-under=50
+      continue-on-error: true
+        
+    - name: Test basic functionality
+      run: |
+        python daily_culture_bot.py --fast --count 1 --output
+        echo "✅ Basic functionality test passed"
+        
+    - name: Test complementary mode
+      run: |
+        python daily_culture_bot.py --complementary --fast --count 1
+        echo "✅ Complementary mode test passed"
