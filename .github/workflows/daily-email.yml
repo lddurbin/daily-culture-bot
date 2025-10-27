@@ -42,6 +42,7 @@ jobs:
           # - Era-based matching: Artwork selected from poet's lifetime (±50 years)
           # - Enhanced AI analysis with quality scoring and fame filtering
           # - Visual theme matching (80% weight) combined with era matching (20% weight)
+          # - Updated with Wikidata timeout fixes (30s/60s timeouts, expanded cache)
           python daily_culture_bot.py \
             --complementary \
             --email "$EMAIL_RECIPIENT" \
