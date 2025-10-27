@@ -30,9 +30,10 @@ class TestVisionAnalyzerInit:
     
     def test_initialization_without_openai_client(self):
         """Test initialization without OpenAI client."""
-        analyzer = VisionAnalyzer(None)
-        
-        assert analyzer.openai_client is None
+        with patch.dict(os.environ, {}, clear=True):
+            analyzer = VisionAnalyzer(None)
+            
+            assert analyzer.openai_client is None
     
     def test_initialization_with_openai_import_error(self):
         """Test initialization when OpenAI is not available."""
@@ -453,9 +454,10 @@ class TestCacheManagement:
     
     def test_is_enabled_without_client(self):
         """Test is_enabled when OpenAI client is not available."""
-        analyzer = VisionAnalyzer(None)
-        
-        assert analyzer.is_enabled() == False
+        with patch.dict(os.environ, {}, clear=True):
+            analyzer = VisionAnalyzer(None)
+            
+            assert analyzer.is_enabled() == False
 
 
 if __name__ == "__main__":
