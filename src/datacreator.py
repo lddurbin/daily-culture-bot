@@ -28,14 +28,20 @@ except ImportError:
 try:
     from . import wikidata_queries
     from . import artwork_processor
+    from . import poem_analyzer
 except ImportError:
     # Fallback for when running as standalone module
     try:
         import wikidata_queries
         import artwork_processor
+        import poem_analyzer
     except ImportError:
         wikidata_queries = None
         artwork_processor = None
+        poem_analyzer = None
+
+# Check if poem analyzer is available
+POEM_ANALYZER_AVAILABLE = poem_analyzer is not None
 
 
 class PaintingDataCreator:
