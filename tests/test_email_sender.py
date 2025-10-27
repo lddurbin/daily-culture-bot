@@ -627,3 +627,197 @@ class TestEmailIntegration:
         )
         
         assert result == True
+
+
+class TestDateDisplayInEmails:
+    """Test date display in email templates."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.test_env = {
+            'SMTP_HOST': 'test.smtp.com',
+            'SMTP_PORT': '587',
+            'SMTP_USERNAME': 'l.d.durbin@gmail.com',
+            'SMTP_PASSWORD': 'testpassword',
+            'SMTP_FROM_EMAIL': 'l.d.durbin@gmail.com'
+        }
+        
+        with patch.dict(os.environ, self.test_env):
+            self.email_sender = email_sender.EmailSender()
+    
+    def test_html_email_displays_artwork_year(self):
+        """Test that HTML email displays artwork creation year."""
+        paintings = [{
+            'title': 'The Great Wave',
+            'artist': 'Katsushika Hokusai',
+            'year': 1831,
+            'style': 'Ukiyo-e',
+            'medium': 'Woodblock print',
+            'museum': 'Metropolitan Museum',
+            'origin': 'Japan',
+            'image': 'http://example.com/image.jpg',
+            'wikidata': 'http://wikidata.org/Q455354'
+        }]
+        
+        html = self.email_sender.build_html_email(paintings, [])
+        
+        # Check that year is displayed in artist line
+        assert 'Katsushika Hokusai (1831)' in html
+        assert 'The Great Wave' in html
+    
+    def test_html_email_displays_poet_lifespan(self):
+        """Test that HTML email displays poet lifespan."""
+        poems = [{
+            'title': 'The Road Not Taken',
+            'author': 'Robert Frost',
+            'text': 'Two roads diverged...',
+            'line_count': 20,
+            'source': 'PoetryDB',
+            'poet_birth_year': 1874,
+            'poet_death_year': 1963,
+            'poet_lifespan': '(1874-1963)'
+        }]
+        
+        html = self.email_sender.build_html_email([], poems)
+        
+        # Check that lifespan is displayed in author line
+        assert 'Robert Frost (1874-1963)' in html
+        assert 'The Road Not Taken' in html
+    
+    def test_html_email_handles_missing_artwork_year(self):
+        """Test that HTML email handles missing artwork year gracefully."""
+        paintings = [{
+            'title': 'Unknown Painting',
+            'artist': 'Unknown Artist',
+            'year': None,
+            'style': 'Unknown',
+            'medium': 'Unknown',
+            'museum': 'Unknown',
+            'origin': 'Unknown',
+            'image': 'http://example.com/image.jpg',
+            'wikidata': 'http://wikidata.org/Q999999'
+        }]
+        
+        html = self.email_sender.build_html_email(paintings, [])
+        
+        # Should show "Unknown year" or just artist name without year
+        assert 'Unknown Artist' in html
+        assert 'Unknown Painting' in html
+        # Should not show "(None)" or similar
+        assert '(None)' not in html
+    
+    def test_html_email_handles_missing_poet_dates(self):
+        """Test that HTML email handles missing poet dates gracefully."""
+        poems = [{
+            'title': 'Unknown Poem',
+            'author': 'Unknown Poet',
+            'text': 'Unknown poetry...',
+            'line_count': 5,
+            'source': 'Unknown',
+            'poet_birth_year': None,
+            'poet_death_year': None,
+            'poet_lifespan': None
+        }]
+        
+        html = self.email_sender.build_html_email([], poems)
+        
+        # Should show just author name without lifespan
+        assert 'Unknown Poet' in html
+        assert 'Unknown Poem' in html
+        # Should not show "(None)" or similar
+        assert '(None)' not in html
+    
+    def test_plain_text_email_displays_artwork_year(self):
+        """Test that plain text email displays artwork creation year."""
+        paintings = [{
+            'title': 'The Great Wave',
+            'artist': 'Katsushika Hokusai',
+            'year': 1831,
+            'style': 'Ukiyo-e',
+            'medium': 'Woodblock print',
+            'museum': 'Metropolitan Museum',
+            'origin': 'Japan',
+            'image': 'http://example.com/image.jpg',
+            'wikidata': 'http://wikidata.org/Q455354'
+        }]
+        
+        text = self.email_sender.build_plain_text_email(paintings, [])
+        
+        # Check that year is displayed in artwork info
+        assert 'Katsushika Hokusai (1831)' in text
+        assert 'The Great Wave' in text
+    
+    def test_plain_text_email_displays_poet_lifespan(self):
+        """Test that plain text email displays poet lifespan."""
+        poems = [{
+            'title': 'The Road Not Taken',
+            'author': 'Robert Frost',
+            'text': 'Two roads diverged...',
+            'line_count': 20,
+            'source': 'PoetryDB',
+            'poet_birth_year': 1874,
+            'poet_death_year': 1963,
+            'poet_lifespan': '(1874-1963)'
+        }]
+        
+        text = self.email_sender.build_plain_text_email([], poems)
+        
+        # Check that lifespan is displayed in poem info
+        assert 'Robert Frost (1874-1963)' in text
+        assert 'The Road Not Taken' in text
+    
+    def test_plain_text_email_handles_missing_dates(self):
+        """Test that plain text email handles missing dates gracefully."""
+        paintings = [{
+            'title': 'Unknown Painting',
+            'artist': 'Unknown Artist',
+            'year': None,
+            'style': 'Unknown',
+            'medium': 'Unknown',
+            'museum': 'Unknown',
+            'origin': 'Unknown',
+            'image': 'http://example.com/image.jpg',
+            'wikidata': 'http://wikidata.org/Q999999'
+        }]
+        
+        poems = [{
+            'title': 'Unknown Poem',
+            'author': 'Unknown Poet',
+            'text': 'Unknown poetry...',
+            'line_count': 5,
+            'source': 'Unknown',
+            'poet_birth_year': None,
+            'poet_death_year': None,
+            'poet_lifespan': None
+        }]
+        
+        text = self.email_sender.build_plain_text_email(paintings, poems)
+        
+        # Should show artist and poet names without dates
+        assert 'Unknown Artist' in text
+        assert 'Unknown Poet' in text
+        # Should not show "(None)" or similar
+        assert '(None)' not in text
+    
+    def test_html_email_with_living_poet(self):
+        """Test that HTML email displays living poet correctly."""
+        poems = [{
+            'title': 'Modern Poem',
+            'author': 'Living Poet',
+            'text': 'Modern poetry...',
+            'line_count': 10,
+            'source': 'Modern Source',
+            'poet_birth_year': 1950,
+            'poet_death_year': None,
+            'poet_lifespan': '(1950-present)'
+        }]
+        
+        html = self.email_sender.build_html_email([], poems)
+        
+        # Check that living poet lifespan is displayed correctly
+        assert 'Living Poet (1950-present)' in html
+        assert 'Modern Poem' in html
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

@@ -559,5 +559,208 @@ class TestSitelinksFiltering:
             assert call_args[1]['max_sitelinks'] == 25
 
 
+class TestArtworkDateFetching:
+    """Test artwork inception date fetching functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    @patch('src.datacreator.requests.Session.get')
+    def test_get_artwork_inception_date_valid_q_code(self, mock_get):
+        """Test fetching inception date with valid Q-code."""
+        # Mock Wikidata response with inception date
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'inception': {
+                            'value': '1831-06-01',
+                            'type': 'time'
+                        }
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        wikidata_url = "https://www.wikidata.org/wiki/Q455354"
+        result = self.creator.get_artwork_inception_date(wikidata_url)
+        
+        assert result == 1831
+        mock_get.assert_called_once()
+    
+    @patch('src.datacreator.requests.Session.get')
+    def test_get_artwork_inception_date_year_only(self, mock_get):
+        """Test fetching inception date with year-only format."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'inception': {
+                            'value': '1908',
+                            'type': 'time'
+                        }
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        wikidata_url = "https://www.wikidata.org/wiki/Q203533"
+        result = self.creator.get_artwork_inception_date(wikidata_url)
+        
+        assert result == 1908
+    
+    @patch('src.datacreator.requests.Session.get')
+    def test_get_artwork_inception_date_range(self, mock_get):
+        """Test fetching inception date with date range."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'inception': {
+                            'value': '1503-1519',
+                            'type': 'time'
+                        }
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        wikidata_url = "https://www.wikidata.org/wiki/Q12418"
+        result = self.creator.get_artwork_inception_date(wikidata_url)
+        
+        assert result == 1503
+    
+    @patch('src.datacreator.requests.Session.get')
+    def test_get_artwork_inception_date_no_date(self, mock_get):
+        """Test fetching inception date when no date is available."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': []
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        wikidata_url = "https://www.wikidata.org/wiki/Q999999"
+        result = self.creator.get_artwork_inception_date(wikidata_url)
+        
+        assert result is None
+    
+    @patch('src.datacreator.requests.Session.get')
+    def test_get_artwork_inception_date_api_error(self, mock_get):
+        """Test handling API errors gracefully."""
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_get.return_value = mock_response
+        
+        wikidata_url = "https://www.wikidata.org/wiki/Q455354"
+        result = self.creator.get_artwork_inception_date(wikidata_url)
+        
+        assert result is None
+    
+    def test_get_artwork_inception_date_invalid_url(self):
+        """Test handling invalid Wikidata URL."""
+        result = self.creator.get_artwork_inception_date("")
+        assert result is None
+        
+        result = self.creator.get_artwork_inception_date("invalid-url")
+        assert result is None
+
+
+class TestProcessPaintingDataWithDates:
+    """Test process_painting_data with date population."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    @patch('src.datacreator.PaintingDataCreator.get_artwork_inception_date')
+    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    def test_process_painting_data_with_date(self, mock_labels, mock_inception):
+        """Test that process_painting_data populates year field from inception date."""
+        # Mock labels response
+        mock_labels.return_value = {
+            "title": "Test Painting",
+            "artist": "Test Artist"
+        }
+        
+        # Mock inception date response
+        mock_inception.return_value = 1831
+        
+        # Mock raw data
+        raw_data = [
+            {
+                'painting': {'value': 'https://www.wikidata.org/wiki/Q455354'},
+                'image': {'value': 'https://example.com/image.jpg'}
+            }
+        ]
+        
+        result = self.creator.process_painting_data(raw_data)
+        
+        assert len(result) == 1
+        assert result[0]['year'] == 1831
+        assert result[0]['title'] == "Test Painting"
+        assert result[0]['artist'] == "Test Artist"
+        
+        # Verify inception date was called
+        mock_inception.assert_called_once_with('https://www.wikidata.org/wiki/Q455354')
+    
+    @patch('src.datacreator.PaintingDataCreator.get_artwork_inception_date')
+    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    def test_process_painting_data_no_date(self, mock_labels, mock_inception):
+        """Test that process_painting_data handles missing dates gracefully."""
+        mock_labels.return_value = {
+            "title": "Test Painting",
+            "artist": "Test Artist"
+        }
+        mock_inception.return_value = None
+        
+        raw_data = [
+            {
+                'painting': {'value': 'https://www.wikidata.org/wiki/Q999999'},
+                'image': {'value': 'https://example.com/image.jpg'}
+            }
+        ]
+        
+        result = self.creator.process_painting_data(raw_data)
+        
+        assert len(result) == 1
+        assert result[0]['year'] is None
+        assert result[0]['title'] == "Test Painting"
+    
+    @patch('src.datacreator.PaintingDataCreator.get_artwork_inception_date')
+    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    def test_process_painting_data_inception_error(self, mock_labels, mock_inception):
+        """Test that process_painting_data handles inception date errors gracefully."""
+        mock_labels.return_value = {
+            "title": "Test Painting",
+            "artist": "Test Artist"
+        }
+        mock_inception.side_effect = Exception("API Error")
+        
+        raw_data = [
+            {
+                'painting': {'value': 'https://www.wikidata.org/wiki/Q455354'},
+                'image': {'value': 'https://example.com/image.jpg'}
+            }
+        ]
+        
+        result = self.creator.process_painting_data(raw_data)
+        
+        assert len(result) == 1
+        assert result[0]['year'] is None  # Should fallback to None on error
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

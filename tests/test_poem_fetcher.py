@@ -6,6 +6,7 @@ Tests for PoemFetcher class
 import pytest
 import sys
 import os
+from unittest.mock import Mock, patch
 
 # Add parent directory to path to import modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -203,6 +204,248 @@ class TestPoemFetcher:
         finally:
             # Restore original method
             self.fetcher.fetch_random_poems = original_fetch
+
+
+class TestPoetDateFetching:
+    """Test poet date fetching functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.fetcher = PoemFetcher()
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_valid_poet(self, mock_get):
+        """Test fetching poet dates with valid poet name."""
+        # Mock Wikidata response with birth and death dates
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'birth': {
+                            'value': '1874-03-26',
+                            'type': 'time'
+                        },
+                        'death': {
+                            'value': '1963-01-29',
+                            'type': 'time'
+                        }
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        result = self.fetcher.get_poet_dates("Robert Frost")
+        
+        assert result is not None
+        assert result['birth_year'] == 1874
+        assert result['death_year'] == 1963
+        mock_get.assert_called_once()
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_living_poet(self, mock_get):
+        """Test fetching poet dates for living poet (no death date)."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': [
+                    {
+                        'birth': {
+                            'value': '1950-01-01',
+                            'type': 'time'
+                        }
+                    }
+                ]
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        result = self.fetcher.get_poet_dates("Living Poet")
+        
+        assert result is not None
+        assert result['birth_year'] == 1950
+        assert result['death_year'] is None
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_unknown_poet(self, mock_get):
+        """Test fetching poet dates for unknown poet."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {
+                'bindings': []
+            }
+        }
+        mock_get.return_value = mock_response
+        
+        result = self.fetcher.get_poet_dates("Unknown Poet")
+        
+        assert result is None
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_api_error(self, mock_get):
+        """Test handling API errors gracefully."""
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_get.return_value = mock_response
+        
+        result = self.fetcher.get_poet_dates("Robert Frost")
+        
+        assert result is None
+    
+    def test_get_poet_dates_empty_name(self):
+        """Test handling empty poet name."""
+        result = self.fetcher.get_poet_dates("")
+        assert result is None
+        
+        result = self.fetcher.get_poet_dates(None)
+        assert result is None
+
+
+class TestEnrichPoemWithDates:
+    """Test poem enrichment with date information."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.fetcher = PoemFetcher()
+    
+    @patch('src.poem_fetcher.PoemFetcher.get_poet_dates')
+    def test_enrich_poem_with_dates_success(self, mock_get_dates):
+        """Test enriching poem with poet dates."""
+        mock_get_dates.return_value = {
+            'birth_year': 1874,
+            'death_year': 1963
+        }
+        
+        poem = {
+            'title': 'The Road Not Taken',
+            'author': 'Robert Frost',
+            'text': 'Two roads diverged...'
+        }
+        
+        result = self.fetcher.enrich_poem_with_dates(poem)
+        
+        assert result['poet_birth_year'] == 1874
+        assert result['poet_death_year'] == 1963
+        assert result['poet_lifespan'] == "(1874-1963)"
+        assert result['title'] == 'The Road Not Taken'  # Original fields preserved
+    
+    @patch('src.poem_fetcher.PoemFetcher.get_poet_dates')
+    def test_enrich_poem_with_dates_living_poet(self, mock_get_dates):
+        """Test enriching poem with living poet dates."""
+        mock_get_dates.return_value = {
+            'birth_year': 1950,
+            'death_year': None
+        }
+        
+        poem = {
+            'title': 'Modern Poem',
+            'author': 'Living Poet',
+            'text': 'Modern poetry...'
+        }
+        
+        result = self.fetcher.enrich_poem_with_dates(poem)
+        
+        assert result['poet_birth_year'] == 1950
+        assert result['poet_death_year'] is None
+        assert result['poet_lifespan'] == "(1950-present)"
+    
+    @patch('src.poem_fetcher.PoemFetcher.get_poet_dates')
+    def test_enrich_poem_with_dates_no_dates(self, mock_get_dates):
+        """Test enriching poem when poet dates are not available."""
+        mock_get_dates.return_value = None
+        
+        poem = {
+            'title': 'Unknown Poem',
+            'author': 'Unknown Poet',
+            'text': 'Unknown poetry...'
+        }
+        
+        result = self.fetcher.enrich_poem_with_dates(poem)
+        
+        assert result['poet_birth_year'] is None
+        assert result['poet_death_year'] is None
+        assert result['poet_lifespan'] is None
+        assert result['title'] == 'Unknown Poem'  # Original fields preserved
+    
+    @patch('src.poem_fetcher.PoemFetcher.get_poet_dates')
+    def test_enrich_poem_with_dates_error(self, mock_get_dates):
+        """Test enriching poem when get_poet_dates raises an error."""
+        mock_get_dates.side_effect = Exception("API Error")
+        
+        poem = {
+            'title': 'Error Poem',
+            'author': 'Error Poet',
+            'text': 'Error poetry...'
+        }
+        
+        result = self.fetcher.enrich_poem_with_dates(poem)
+        
+        assert result['poet_birth_year'] is None
+        assert result['poet_death_year'] is None
+        assert result['poet_lifespan'] is None
+        assert result['title'] == 'Error Poem'  # Original fields preserved
+
+
+class TestFormatPoemDataWithDates:
+    """Test _format_poem_data includes date enrichment."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.fetcher = PoemFetcher()
+    
+    @patch('src.poem_fetcher.PoemFetcher.enrich_poem_with_dates')
+    def test_format_poem_data_calls_enrich(self, mock_enrich):
+        """Test that _format_poem_data calls enrich_poem_with_dates."""
+        mock_enrich.return_value = {
+            'title': 'Test Poem',
+            'author': 'Test Author',
+            'text': 'Test text',
+            'poet_birth_year': 1874,
+            'poet_death_year': 1963,
+            'poet_lifespan': '(1874-1963)'
+        }
+        
+        raw_poem = {
+            'title': 'Test Poem',
+            'author': 'Test Author',
+            'lines': ['Test text']
+        }
+        
+        result = self.fetcher._format_poem_data(raw_poem)
+        
+        assert result is not None
+        assert result['poet_birth_year'] == 1874
+        assert result['poet_death_year'] == 1963
+        assert result['poet_lifespan'] == '(1874-1963)'
+        
+        # Verify enrich_poem_with_dates was called
+        mock_enrich.assert_called_once()
+    
+    @patch('src.poem_fetcher.PoemFetcher.enrich_poem_with_dates')
+    def test_format_poem_data_handles_enrich_error(self, mock_enrich):
+        """Test that _format_poem_data handles enrich_poem_with_dates errors."""
+        mock_enrich.side_effect = Exception("Enrichment error")
+        
+        raw_poem = {
+            'title': 'Test Poem',
+            'author': 'Test Author',
+            'lines': ['Test text']
+        }
+        
+        result = self.fetcher._format_poem_data(raw_poem)
+        
+        # Should return poem even when enrichment fails
+        assert result is not None
+        assert result['title'] == 'Test Poem'
+        assert result['author'] == 'Test Author'
+        # Should not have date fields when enrichment fails
+        assert 'poet_birth_year' not in result
+        assert 'poet_death_year' not in result
+        assert 'poet_lifespan' not in result
 
 
 if __name__ == "__main__":
