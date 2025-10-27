@@ -23,7 +23,51 @@ class PoemFetcher:
             'User-Agent': 'DailyCultureBot/1.0 (https://github.com/yourusername/daily-culture-bot)'
         })
         # Cache for poet dates to avoid repeated API calls
-        self.poet_date_cache = {}
+        self.poet_date_cache = {
+            # Pre-populate with common poets to avoid API calls
+            # Include multiple name variations for each poet
+            "Robert Frost": {"birth_year": 1874, "death_year": 1963},
+            "William Shakespeare": {"birth_year": 1564, "death_year": 1616},
+            "Shakespeare": {"birth_year": 1564, "death_year": 1616},
+            "William Wordsworth": {"birth_year": 1770, "death_year": 1850},
+            "Wordsworth": {"birth_year": 1770, "death_year": 1850},
+            "Emily Dickinson": {"birth_year": 1830, "death_year": 1886},
+            "Dickinson": {"birth_year": 1830, "death_year": 1886},
+            "Walt Whitman": {"birth_year": 1819, "death_year": 1892},
+            "Whitman": {"birth_year": 1819, "death_year": 1892},
+            "Edgar Allan Poe": {"birth_year": 1809, "death_year": 1849},
+            "Poe": {"birth_year": 1809, "death_year": 1849},
+            "Maya Angelou": {"birth_year": 1928, "death_year": 2014},
+            "Angelou": {"birth_year": 1928, "death_year": 2014},
+            "Langston Hughes": {"birth_year": 1901, "death_year": 1967},
+            "Hughes": {"birth_year": 1901, "death_year": 1967},
+            "Sylvia Plath": {"birth_year": 1932, "death_year": 1963},
+            "Plath": {"birth_year": 1932, "death_year": 1963},
+            "T.S. Eliot": {"birth_year": 1888, "death_year": 1965},
+            "Eliot": {"birth_year": 1888, "death_year": 1965},
+            "Pablo Neruda": {"birth_year": 1904, "death_year": 1973},
+            "Neruda": {"birth_year": 1904, "death_year": 1973},
+            "Rumi": {"birth_year": 1207, "death_year": 1273},
+            "Oscar Wilde": {"birth_year": 1854, "death_year": 1900},
+            "Wilde": {"birth_year": 1854, "death_year": 1900},
+            "John Keats": {"birth_year": 1795, "death_year": 1821},
+            "Keats": {"birth_year": 1795, "death_year": 1821},
+            "Percy Bysshe Shelley": {"birth_year": 1792, "death_year": 1822},
+            "Shelley": {"birth_year": 1792, "death_year": 1822},
+            "Lord Byron": {"birth_year": 1788, "death_year": 1824},
+            "George Gordon, Lord Byron": {"birth_year": 1788, "death_year": 1824},
+            "Byron": {"birth_year": 1788, "death_year": 1824},
+            "Samuel Taylor Coleridge": {"birth_year": 1772, "death_year": 1834},
+            "Coleridge": {"birth_year": 1772, "death_year": 1834},
+            "William Blake": {"birth_year": 1757, "death_year": 1827},
+            "Blake": {"birth_year": 1757, "death_year": 1827},
+            "Robert Burns": {"birth_year": 1759, "death_year": 1796},
+            "Burns": {"birth_year": 1759, "death_year": 1796},
+            "Elizabeth Barrett Browning": {"birth_year": 1806, "death_year": 1861},
+            "Browning": {"birth_year": 1806, "death_year": 1861},
+            "Geoffrey Chaucer": {"birth_year": 1343, "death_year": 1400},
+            "Chaucer": {"birth_year": 1343, "death_year": 1400},
+        }
         # Option to disable poet date fetching (useful when Wikidata is slow)
         self.enable_poet_dates = enable_poet_dates
     
@@ -258,63 +302,109 @@ class PoemFetcher:
         if not poet_name:
             return None
         
-        # Check cache first
+        # Check cache first (including pre-populated common poets)
         if poet_name in self.poet_date_cache:
             return self.poet_date_cache[poet_name]
         
+        print(f"🔍 Looking up poet dates for: {poet_name}")
+        
         try:
-            # Query Wikidata for poet entity using author name
-            sparql_query = f"""
-            SELECT ?birth ?death WHERE {{
-              ?person rdfs:label ?name .
-              FILTER(LANG(?name) = "en")
-              FILTER(CONTAINS(LCASE(?name), LCASE("{poet_name}")))
-              ?person wdt:P569 ?birth .
-              OPTIONAL {{ ?person wdt:P570 ?death }}
-            }}
-            LIMIT 1
-            """
+            # More efficient query: search for exact name match first, then fuzzy
+            # Split name into parts for better matching
+            name_parts = poet_name.strip().split()
+            if len(name_parts) >= 2:
+                first_name = name_parts[0]
+                last_name = name_parts[-1]
+                
+                # Try exact match first (much faster)
+                sparql_query = f"""
+                SELECT ?birth ?death WHERE {{
+                  ?person rdfs:label ?name .
+                  FILTER(LANG(?name) = "en")
+                  FILTER(?name = "{poet_name}" || ?name = "{last_name}, {first_name}")
+                  ?person wdt:P569 ?birth .
+                  OPTIONAL {{ ?person wdt:P570 ?death }}
+                  # Filter to people who are poets/writers
+                  {{ ?person wdt:P106 wd:Q49757 }} UNION {{ ?person wdt:P106 wd:Q36180 }}
+                }}
+                LIMIT 1
+                """
+            else:
+                # Single name - use contains but with poet filter
+                sparql_query = f"""
+                SELECT ?birth ?death WHERE {{
+                  ?person rdfs:label ?name .
+                  FILTER(LANG(?name) = "en")
+                  FILTER(CONTAINS(LCASE(?name), LCASE("{poet_name}")))
+                  ?person wdt:P569 ?birth .
+                  OPTIONAL {{ ?person wdt:P570 ?death }}
+                  # Filter to people who are poets/writers
+                  {{ ?person wdt:P106 wd:Q49757 }} UNION {{ ?person wdt:P106 wd:Q36180 }}
+                }}
+                LIMIT 1
+                """
             
-            response = self.session.get(
-                self.wikidata_endpoint,
-                params={'query': sparql_query, 'format': 'json'},
-                timeout=10  # Reduced timeout from 30s to 10s
-            )
+            # Try multiple query strategies with increasing timeout
+            query_strategies = [
+                (sparql_query, 5),  # Fast exact match
+                (sparql_query, 10), # Slower fuzzy match
+            ]
             
-            if response.status_code == 200:
-                data = response.json()
-                results = data['results']['bindings']
-                if results:
-                    birth_value = results[0].get('birth', {}).get('value', '')
-                    death_value = results[0].get('death', {}).get('value', '')
+            for query, timeout in query_strategies:
+                try:
+                    response = self.session.get(
+                        self.wikidata_endpoint,
+                        params={'query': query, 'format': 'json'},
+                        timeout=timeout
+                    )
                     
-                    # Extract years from date strings
-                    birth_year = None
-                    death_year = None
-                    
-                    if birth_value:
-                        birth_match = re.match(r'^(\d{4})', birth_value)
-                        if birth_match:
-                            birth_year = int(birth_match.group(1))
-                    
-                    if death_value:
-                        death_match = re.match(r'^(\d{4})', death_value)
-                        if death_match:
-                            death_year = int(death_match.group(1))
-                    
-                    result = {
-                        'birth_year': birth_year,
-                        'death_year': death_year
-                    }
-                    
-                    # Cache the result
-                    self.poet_date_cache[poet_name] = result
-                    return result
+                    if response.status_code == 200:
+                        data = response.json()
+                        results = data['results']['bindings']
+                        if results:
+                            birth_value = results[0].get('birth', {}).get('value', '')
+                            death_value = results[0].get('death', {}).get('value', '')
+                            
+                            # Extract years from date strings
+                            birth_year = None
+                            death_year = None
+                            
+                            if birth_value:
+                                birth_match = re.match(r'^(\d{4})', birth_value)
+                                if birth_match:
+                                    birth_year = int(birth_match.group(1))
+                            
+                            if death_value:
+                                death_match = re.match(r'^(\d{4})', death_value)
+                                if death_match:
+                                    death_year = int(death_match.group(1))
+                            
+                            result = {
+                                'birth_year': birth_year,
+                                'death_year': death_year
+                            }
+                            
+                            # Cache the result
+                            self.poet_date_cache[poet_name] = result
+                            print(f"✅ Found poet dates for {poet_name}: {birth_year}-{death_year if death_year else 'present'}")
+                            return result
+                        else:
+                            # No results with this strategy, try next
+                            continue
+                    else:
+                        # HTTP error, try next strategy
+                        continue
+                        
+                except Exception as query_error:
+                    # Query failed, try next strategy
+                    print(f"Query strategy failed for {poet_name}: {query_error}")
+                    continue
         except Exception as e:
-            print(f"Error getting poet dates for {poet_name}: {e}")
+            print(f"❌ Error getting poet dates for {poet_name}: {e}")
         
         # Cache None result to avoid repeated failed lookups
         self.poet_date_cache[poet_name] = None
+        print(f"⚠️ No poet dates found for: {poet_name}")
         return None
     
     def enrich_poem_with_dates(self, poem: Dict) -> Dict:

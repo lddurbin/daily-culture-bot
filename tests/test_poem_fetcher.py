@@ -237,7 +237,7 @@ class TestPoetDateFetching:
         }
         mock_get.return_value = mock_response
         
-        result = self.fetcher.get_poet_dates("Robert Frost")
+        result = self.fetcher.get_poet_dates("Unknown Poet")
         
         assert result is not None
         assert result['birth_year'] == 1874
@@ -292,7 +292,7 @@ class TestPoetDateFetching:
         mock_response.status_code = 500
         mock_get.return_value = mock_response
         
-        result = self.fetcher.get_poet_dates("Robert Frost")
+        result = self.fetcher.get_poet_dates("Unknown Poet")
         
         assert result is None
     
@@ -446,6 +446,34 @@ class TestFormatPoemDataWithDates:
         assert 'poet_birth_year' not in result
         assert 'poet_death_year' not in result
         assert 'poet_lifespan' not in result
+    
+    def test_get_poet_dates_cached_poet(self):
+        """Test that cached poets return dates without API calls"""
+        fetcher = PoemFetcher()
+        
+        # Test cached poet
+        result = fetcher.get_poet_dates("Robert Frost")
+        
+        assert result is not None
+        assert result['birth_year'] == 1874
+        assert result['death_year'] == 1963
+    
+    def test_get_poet_dates_name_variations(self):
+        """Test that different name variations work"""
+        fetcher = PoemFetcher()
+        
+        # Test different variations of same poet
+        byron_variations = [
+            "Lord Byron",
+            "George Gordon, Lord Byron", 
+            "Byron"
+        ]
+        
+        for name in byron_variations:
+            result = fetcher.get_poet_dates(name)
+            assert result is not None
+            assert result['birth_year'] == 1788
+            assert result['death_year'] == 1824
 
 
 if __name__ == "__main__":
