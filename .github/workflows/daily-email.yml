@@ -38,7 +38,10 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           # Send complementary artwork and poem via email
-          # Using enhanced AI analysis with quality scoring and fame filtering
+          # Features:
+          # - Era-based matching: Artwork selected from poet's lifetime (±50 years)
+          # - Enhanced AI analysis with quality scoring and fame filtering
+          # - Visual theme matching (80% weight) combined with era matching (20% weight)
           python daily_culture_bot.py \
             --complementary \
             --email "$EMAIL_RECIPIENT" \
