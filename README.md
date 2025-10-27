@@ -271,6 +271,12 @@ python daily_culture_bot.py --poems-only --poem-count 3 --output
 python daily_culture_bot.py --count 3 --fast --html
 ```
 
+### Disable Poet Date Fetching (Avoid Timeouts)
+```bash
+# If Wikidata API is slow, disable poet date fetching for faster execution
+python daily_culture_bot.py --poems --no-poet-dates --html
+```
+
 ### All Options
 ```bash
 python daily_culture_bot.py --help
@@ -286,6 +292,7 @@ python daily_culture_bot.py --help
 - `--poem-count COUNT` - Number of poems to fetch (default: 1)
 - `--poems-only` - Fetch only poems, no artwork
 - `--complementary` - Match artwork to poem themes (automatically enables --poems)
+- `--no-poet-dates` - Disable poet date fetching (faster, avoids Wikidata timeouts)
 - `--max-fame-level LEVEL` - Maximum fame level (sitelinks) for artwork (default: 20, lower=more obscure)
 - `--min-match-score SCORE` - Minimum match quality score 0.0-1.0 (default: 0.4)
 - `--email EMAIL` - Email address to send content to (enables email feature)
