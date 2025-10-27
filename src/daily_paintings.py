@@ -385,7 +385,8 @@ def main():
         print("="*80)
         
         for i, poem in enumerate(poems):
-            print(f"\n{i+1}. 📝 {poem['title']} by {poem['author']}{f' {poem.get('poet_lifespan', '')}' if poem.get('poet_lifespan') else ''}")
+            lifespan = f" {poem.get('poet_lifespan', '')}" if poem.get('poet_lifespan') else ''
+            print(f"\n{i+1}. 📝 {poem['title']} by {poem['author']}{lifespan}")
             print(f"   Lines: {poem['line_count']} | Source: {poem['source']}")
             print(f"   Text preview: {poem['text'][:100]}...")
     
