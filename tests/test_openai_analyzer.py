@@ -24,7 +24,16 @@ class TestSelectBestArtworkMatches:
     def setup_method(self):
         """Set up test fixtures."""
         self.mock_client = Mock()
-        self.analyzer = OpenAIAnalyzer(self.mock_client)
+        # Create mock theme and emotion mappings
+        self.mock_theme_mappings = {
+            "nature": {"keywords": ["nature", "forest"], "q_codes": ["Q7860"]},
+            "love": {"keywords": ["love", "heart"], "q_codes": ["Q316"]}
+        }
+        self.mock_emotion_mappings = {
+            "joy": {"q_codes": ["Q2385804"], "keywords": ["happy", "merry"]},
+            "sadness": {"q_codes": ["Q4"], "keywords": ["sad", "mourning"]}
+        }
+        self.analyzer = OpenAIAnalyzer(self.mock_client, self.mock_theme_mappings, self.mock_emotion_mappings)
     
     def test_select_best_artwork_matches_success(self):
         """Test successful artwork selection."""
@@ -152,7 +161,7 @@ class TestSelectBestArtworkMatches:
     
     def test_select_best_artwork_matches_no_openai_client(self):
         """Test selection when OpenAI client is not available."""
-        analyzer = OpenAIAnalyzer(None)
+        analyzer = OpenAIAnalyzer(None, self.mock_theme_mappings, self.mock_emotion_mappings)
         
         poem = {"title": "Test", "text": "Test text"}
         candidates = [{"title": "Test Artwork"}]
@@ -374,7 +383,16 @@ class TestErrorHandling:
     def setup_method(self):
         """Set up test fixtures."""
         self.mock_client = Mock()
-        self.analyzer = OpenAIAnalyzer(self.mock_client)
+        # Create mock theme and emotion mappings
+        self.mock_theme_mappings = {
+            "nature": {"keywords": ["nature", "forest"], "q_codes": ["Q7860"]},
+            "love": {"keywords": ["love", "heart"], "q_codes": ["Q316"]}
+        }
+        self.mock_emotion_mappings = {
+            "joy": {"q_codes": ["Q2385804"], "keywords": ["happy", "merry"]},
+            "sadness": {"q_codes": ["Q4"], "keywords": ["sad", "mourning"]}
+        }
+        self.analyzer = OpenAIAnalyzer(self.mock_client, self.mock_theme_mappings, self.mock_emotion_mappings)
     
     def test_select_best_artwork_matches_network_error(self):
         """Test handling of network errors."""
@@ -426,7 +444,16 @@ class TestPerformance:
     def setup_method(self):
         """Set up test fixtures."""
         self.mock_client = Mock()
-        self.analyzer = OpenAIAnalyzer(self.mock_client)
+        # Create mock theme and emotion mappings
+        self.mock_theme_mappings = {
+            "nature": {"keywords": ["nature", "forest"], "q_codes": ["Q7860"]},
+            "love": {"keywords": ["love", "heart"], "q_codes": ["Q316"]}
+        }
+        self.mock_emotion_mappings = {
+            "joy": {"q_codes": ["Q2385804"], "keywords": ["happy", "merry"]},
+            "sadness": {"q_codes": ["Q4"], "keywords": ["sad", "mourning"]}
+        }
+        self.analyzer = OpenAIAnalyzer(self.mock_client, self.mock_theme_mappings, self.mock_emotion_mappings)
     
     def test_select_best_artwork_matches_large_candidate_set(self):
         """Test performance with many candidates."""
