@@ -6,6 +6,7 @@ Tests for PoemFetcher class
 import pytest
 import sys
 import os
+import requests
 from unittest.mock import Mock, patch
 
 # Add parent directory to path to import modules
@@ -474,6 +475,78 @@ class TestFormatPoemDataWithDates:
             assert result is not None
             assert result['birth_year'] == 1788
             assert result['death_year'] == 1824
+
+
+class TestPoemFetcherErrorHandling:
+    """Test error handling in poem fetcher."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.fetcher = PoemFetcher()
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_fetch_random_poems_api_error(self, mock_get):
+        """Test handling of API errors in fetch_random_poems."""
+        mock_get.side_effect = requests.RequestException("API Error")
+        
+        result = self.fetcher.fetch_random_poems(1)
+        
+        assert result == []
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_fetch_random_poems_timeout(self, mock_get):
+        """Test handling of timeout in fetch_random_poems."""
+        mock_get.side_effect = requests.Timeout("Request timeout")
+        
+        result = self.fetcher.fetch_random_poems(1)
+        
+        assert result == []
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_fetch_random_poems_malformed_response(self, mock_get):
+        """Test handling of malformed response in fetch_random_poems."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.side_effect = ValueError("Invalid JSON")
+        mock_get.return_value = mock_response
+        
+        result = self.fetcher.fetch_random_poems(1)
+        
+        assert result == []
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_fetch_poems_with_word_limit_api_error(self, mock_get):
+        """Test handling of API errors in fetch_poems_with_word_limit."""
+        mock_get.side_effect = requests.RequestException("API Error")
+        
+        result = self.fetcher.fetch_poems_with_word_limit(1, max_words=200)
+        
+        assert result == []
+    
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_fetch_poems_with_word_limit_max_retries(self, mock_get):
+        """Test handling of max retries exceeded in fetch_poems_with_word_limit."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = []  # Empty response
+        mock_get.return_value = mock_response
+        
+        result = self.fetcher.fetch_poems_with_word_limit(1, max_words=200, max_retries=2)
+        
+        assert result == []
+    
+    def test_count_words_edge_cases(self):
+        """Test count_words method with edge cases."""
+        # Test with None
+        assert self.fetcher.count_words(None) == 0
+        
+        # Test with empty poem
+        empty_poem = {"lines": []}
+        assert self.fetcher.count_words(empty_poem) == 0
+        
+        # Test with poem containing only empty lines
+        empty_lines_poem = {"lines": ["", "   ", "\n"]}
+        assert self.fetcher.count_words(empty_lines_poem) == 0
 
 
 if __name__ == "__main__":
