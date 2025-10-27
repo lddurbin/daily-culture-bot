@@ -71,7 +71,8 @@ class PoemAnalyzer:
                 "keywords": [
                     "death", "die", "dies", "died", "dying", "dead", "grave", "graves", "burial",
                     "funeral", "mourning", "grief", "sorrow", "sad", "sadness", "tears", "weep",
-                    "weeping", "memorial", "remembrance", "ghost", "ghosts", "spirit", "spirits"
+                    "weeping", "memorial", "remembrance", "ghost", "ghosts", "spirit", "spirits",
+                    "dust", "ashes", "epitaph", "tomb", "cemetery"
                 ],
                 "q_codes": ["Q4", "Q198", "Q18811"]  # death, war, battle
             },
@@ -218,9 +219,13 @@ class PoemAnalyzer:
             combined_themes = list(set(ai_analysis.get("themes", []) + keyword_analysis.get("themes", [])))
             combined_q_codes = list(set(ai_analysis.get("q_codes", []) + keyword_analysis.get("q_codes", [])))
             
+            # Combine all emotions
+            all_emotions = ai_analysis.get("primary_emotions", []) + ai_analysis.get("secondary_emotions", [])
+            
             return {
                 "primary_emotions": ai_analysis.get("primary_emotions", []),
                 "secondary_emotions": ai_analysis.get("secondary_emotions", []),
+                "emotions": all_emotions,  # Combined emotions for backward compatibility
                 "emotional_tone": ai_analysis.get("emotional_tone", "unknown"),
                 "themes": combined_themes,
                 "imagery_type": ai_analysis.get("imagery_type", "concrete"),
@@ -520,7 +525,7 @@ Return ONLY valid JSON with no additional text."""
         Returns:
             Float score between 0.0 and 1.0
         """
-        if not poem_analysis or not artwork_q_codes:
+        if not poem_analysis:
             return 0.0
         
         score = 0.0
