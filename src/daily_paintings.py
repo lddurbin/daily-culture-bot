@@ -40,6 +40,8 @@ def parse_arguments():
     parser.add_argument('--poem-count', type=int, default=1, help='Number of poems to fetch (default: 1)')
     parser.add_argument('--poems-only', action='store_true', help='Fetch only poems, no artwork')
     parser.add_argument('--complementary', action='store_true', help='Match artwork to poem themes (automatically enables --poems)')
+    parser.add_argument('--no-poet-dates', action='store_true',
+                       help='Disable poet date fetching (faster, avoids Wikidata timeouts)')
     parser.add_argument('--email', help='Email address to send content to (enables email feature)')
     parser.add_argument('--email-format', choices=['html', 'text', 'both'], default='both', 
                        help='Email format: html, text, or both (default: both)')
@@ -527,7 +529,7 @@ def generate_html_gallery(paintings, image_paths, poems=None, match_status=None,
             html_content += f"""
                 <div class="poem-card">
                     <h3 class="poem-title">{poem['title']}</h3>
-                    <p class="poem-author">by {poem['author']}</p>
+                    <p class="poem-author">by {poem['author']}{f" {poem.get('poet_lifespan', '')}" if poem.get('poet_lifespan') else ''}</p>
                     {theme_info}
                     <div class="poem-text">
                         <pre>{poem['text']}</pre>
@@ -572,7 +574,7 @@ def main():
     
     # Initialize the data creators
     creator = datacreator.PaintingDataCreator(query_timeout=args.query_timeout)
-    poem_fetcher_instance = poem_fetcher.PoemFetcher()
+    poem_fetcher_instance = poem_fetcher.PoemFetcher(enable_poet_dates=not args.no_poet_dates)
     poem_analyzer_instance = poem_analyzer.PoemAnalyzer()
     
     paintings = []
@@ -863,7 +865,7 @@ def main():
         print("="*80)
         
         for i, poem in enumerate(poems):
-            print(f"\n{i+1}. 📝 {poem['title']} by {poem['author']}")
+            print(f"\n{i+1}. 📝 {poem['title']} by {poem['author']}{f' {poem.get('poet_lifespan', '')}' if poem.get('poet_lifespan') else ''}")
             print(f"   Lines: {poem['line_count']} | Source: {poem['source']}")
             print(f"   Text preview: {poem['text'][:100]}...")
     

@@ -326,7 +326,7 @@ class EmailSender:
                 html_content += f"""
         <div class="poem-item">
             <h3 class="poem-title">{poem['title']}</h3>
-            <p class="poem-author">by {poem['author']}</p>
+            <p class="poem-author">by {poem['author']}{f" {poem.get('poet_lifespan', '')}" if poem.get('poet_lifespan') else ''}</p>
             {theme_info}
             <div class="poem-text">{poem['text']}</div>
             <div class="poem-meta">
@@ -407,7 +407,7 @@ class EmailSender:
                 
                 text_content += f"""
 {i+1}. {poem['title']}
-   Author: {poem['author']}{theme_text}
+   Author: {poem['author']}{f" {poem.get('poet_lifespan', '')}" if poem.get('poet_lifespan') else ''}{theme_text}
    Lines: {poem['line_count']}
    Source: {poem['source']}
 
