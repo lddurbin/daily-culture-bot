@@ -1755,14 +1755,28 @@ class TestFetchArtworkBySubjectWithScoring:
     @patch('src.datacreator.POEM_ANALYZER_AVAILABLE', True)
     @patch('src.datacreator.poem_analyzer.PoemAnalyzer')
     @patch('src.datacreator.PaintingDataCreator.query_artwork_by_subject')
-    def test_fetch_artwork_by_subject_with_scoring_analyzer_available(self, mock_query, mock_analyzer_class):
+    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    def test_fetch_artwork_by_subject_with_scoring_analyzer_available(self, mock_labels, mock_query, mock_analyzer_class):
         """Test scoring when poem analyzer is available."""
         # Mock analyzer instance
         mock_analyzer = mock_analyzer_class.return_value
         mock_analyzer.score_artwork_match.return_value = 0.8
         
-        # Mock query results with proper structure
-        mock_query.return_value = [{'title': 'Test Artwork', 'image': 'test.jpg', 'wikidata_url': 'https://wikidata.org/Q123'}]
+        # Mock query results with proper Wikidata SPARQL structure
+        mock_query.return_value = [{
+            'artwork': {'value': 'https://wikidata.org/Q123'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+            'sitelinks': {'value': '5'},
+            'subject': {'value': 'https://wikidata.org/Q1'},
+            'genre': {'value': 'https://wikidata.org/Q191163'},
+            'artworkType': {'value': 'https://wikidata.org/Q3305213'}
+        }]
+        
+        # Mock labels method
+        mock_labels.return_value = {
+            'title': 'Test Artwork',
+            'artist': 'Test Artist'
+        }
         
         poem_analysis = {'themes': ['nature'], 'mood': 'peaceful'}
         q_codes = ['Q1']
@@ -1778,14 +1792,28 @@ class TestFetchArtworkBySubjectWithScoring:
     @patch('src.datacreator.POEM_ANALYZER_AVAILABLE', True)
     @patch('src.datacreator.poem_analyzer.PoemAnalyzer')
     @patch('src.datacreator.PaintingDataCreator.query_artwork_by_subject')
-    def test_fetch_artwork_by_subject_with_scoring_low_score_fallback(self, mock_query, mock_analyzer_class):
+    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    def test_fetch_artwork_by_subject_with_scoring_low_score_fallback(self, mock_labels, mock_query, mock_analyzer_class):
         """Test fallback when scored results don't meet minimum score."""
         # Mock analyzer instance
         mock_analyzer = mock_analyzer_class.return_value
         mock_analyzer.score_artwork_match.return_value = 0.2  # Low score
         
-        # Mock query results
-        mock_query.return_value = [{'title': 'Test Artwork', 'image': 'test.jpg'}]
+        # Mock query results with proper Wikidata SPARQL structure
+        mock_query.return_value = [{
+            'artwork': {'value': 'https://wikidata.org/Q123'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+            'sitelinks': {'value': '5'},
+            'subject': {'value': 'https://wikidata.org/Q1'},
+            'genre': {'value': 'https://wikidata.org/Q191163'},
+            'artworkType': {'value': 'https://wikidata.org/Q3305213'}
+        }]
+        
+        # Mock labels method
+        mock_labels.return_value = {
+            'title': 'Test Artwork',
+            'artist': 'Test Artist'
+        }
         
         poem_analysis = {'themes': ['nature'], 'mood': 'peaceful'}
         q_codes = ['Q1']
@@ -1814,14 +1842,28 @@ class TestFetchArtworkBySubjectWithScoring:
     @patch('src.datacreator.POEM_ANALYZER_AVAILABLE', True)
     @patch('src.datacreator.poem_analyzer.PoemAnalyzer')
     @patch('src.datacreator.PaintingDataCreator.query_artwork_by_subject')
-    def test_fetch_artwork_by_subject_with_scoring_with_genres(self, mock_query, mock_analyzer_class):
+    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    def test_fetch_artwork_by_subject_with_scoring_with_genres(self, mock_labels, mock_query, mock_analyzer_class):
         """Test scoring with genre filtering."""
         # Mock analyzer instance
         mock_analyzer = mock_analyzer_class.return_value
         mock_analyzer.score_artwork_match.return_value = 0.7
         
-        # Mock query results with proper structure
-        mock_query.return_value = [{'title': 'Test Artwork', 'image': 'test.jpg', 'wikidata_url': 'https://wikidata.org/Q123'}]
+        # Mock query results with proper Wikidata SPARQL structure
+        mock_query.return_value = [{
+            'artwork': {'value': 'https://wikidata.org/Q123'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+            'sitelinks': {'value': '5'},
+            'subject': {'value': 'https://wikidata.org/Q1'},
+            'genre': {'value': 'https://wikidata.org/Q191163'},
+            'artworkType': {'value': 'https://wikidata.org/Q3305213'}
+        }]
+        
+        # Mock labels method
+        mock_labels.return_value = {
+            'title': 'Test Artwork',
+            'artist': 'Test Artist'
+        }
         
         poem_analysis = {'themes': ['nature'], 'mood': 'peaceful'}
         q_codes = ['Q1']
@@ -1881,6 +1923,130 @@ class TestFetchArtworkBySubjectWithScoring:
         assert mock_query.call_count >= 1
         # Should return results from fallback strategy
         assert isinstance(result, list)
+
+
+class TestDepictsFirstStrategy:
+    """Test depicts-first strategy with direct depicts matching."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    @patch('src.datacreator.POEM_ANALYZER_AVAILABLE', True)
+    @patch('src.datacreator.poem_analyzer.PoemAnalyzer')
+    def test_depicts_first_strategy_with_bonus(self, mock_analyzer_class):
+        """Test that direct depicts matches get +0.5 score bonus."""
+        # Mock analyzer instance
+        mock_analyzer = mock_analyzer_class.return_value
+        mock_analyzer.score_artwork_match.return_value = 0.3  # Base score
+        
+        # Mock the queries instance
+        mock_queries = Mock()
+        mock_queries.query_artwork_by_direct_depicts.return_value = [{
+            'artwork': {'value': 'https://wikidata.org/Q123'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test.jpg'},
+            'sitelinks': {'value': '5'},
+            'subject': {'value': 'https://wikidata.org/Q10884'},  # tree
+            'genre': {'value': 'https://wikidata.org/Q191163'},  # landscape
+            'artworkType': {'value': 'https://wikidata.org/Q3305213'}  # painting
+        }]
+        
+        # Mock get_painting_labels
+        with patch.object(self.creator, 'get_painting_labels', return_value={'title': 'Tree Painting', 'artist': 'Artist A'}):
+            # Set the queries attribute on the instance
+            self.creator.queries = mock_queries
+            
+            poem_analysis = {'themes': ['nature'], 'mood': 'peaceful'}
+            q_codes = ['Q10884']  # tree
+            
+            result = self.creator.fetch_artwork_by_subject_with_scoring(
+                poem_analysis, q_codes, count=1, min_score=0.4
+            )
+            
+            # Should have called direct depicts query first
+            mock_queries.query_artwork_by_direct_depicts.assert_called_once()
+            
+            # Should return results with bonus applied
+            assert len(result) == 1
+            artwork, score = result[0]
+            assert score >= 0.8  # 0.3 base + 0.5 bonus = 0.8
+    
+    @patch('src.datacreator.POEM_ANALYZER_AVAILABLE', True)
+    @patch('src.datacreator.poem_analyzer.PoemAnalyzer')
+    def test_depicts_first_fallback_to_regular_query(self, mock_analyzer_class):
+        """Test fallback to regular query when direct depicts returns no results."""
+        # Mock analyzer instance
+        mock_analyzer = mock_analyzer_class.return_value
+        mock_analyzer.score_artwork_match.return_value = 0.5  # Good score
+        
+        # Mock the queries instance
+        mock_queries = Mock()
+        mock_queries.query_artwork_by_direct_depicts.return_value = []
+        mock_queries.query_artwork_by_subject.return_value = [{
+            'artwork': {'value': 'https://wikidata.org/Q456'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test2.jpg'},
+            'sitelinks': {'value': '3'},
+            'subject': {'value': 'https://wikidata.org/Q7860'},  # nature
+            'genre': {'value': 'https://wikidata.org/Q191163'},  # landscape
+            'artworkType': {'value': 'https://wikidata.org/Q3305213'}  # painting
+        }]
+        
+        # Mock get_painting_labels
+        with patch.object(self.creator, 'get_painting_labels', return_value={'title': 'Nature Painting', 'artist': 'Artist B'}):
+            # Set the queries attribute on the instance
+            self.creator.queries = mock_queries
+            
+            poem_analysis = {'themes': ['nature'], 'mood': 'peaceful'}
+            q_codes = ['Q7860']  # nature
+            
+            result = self.creator.fetch_artwork_by_subject_with_scoring(
+                poem_analysis, q_codes, count=1, min_score=0.4
+            )
+            
+            # Should have tried direct depicts first, then regular query
+            mock_queries.query_artwork_by_direct_depicts.assert_called_once()
+            mock_queries.query_artwork_by_subject.assert_called_once()
+            
+            # Should return results without bonus (regular query)
+            assert len(result) == 1
+            artwork, score = result[0]
+            assert score == 0.5  # No bonus for regular query
+    
+    @patch('src.datacreator.POEM_ANALYZER_AVAILABLE', True)
+    @patch('src.datacreator.poem_analyzer.PoemAnalyzer')
+    def test_depicts_bonus_capped_at_one(self, mock_analyzer_class):
+        """Test that depicts bonus is capped at 1.0 total score."""
+        # Mock analyzer instance with high base score
+        mock_analyzer = mock_analyzer_class.return_value
+        mock_analyzer.score_artwork_match.return_value = 0.8  # High base score
+        
+        # Mock the queries instance
+        mock_queries = Mock()
+        mock_queries.query_artwork_by_direct_depicts.return_value = [{
+            'artwork': {'value': 'https://wikidata.org/Q789'},
+            'image': {'value': 'https://commons.wikimedia.org/wiki/File:test3.jpg'},
+            'sitelinks': {'value': '2'},
+            'subject': {'value': 'https://wikidata.org/Q11427'},  # flower
+            'genre': {'value': 'https://wikidata.org/Q191163'},  # landscape
+            'artworkType': {'value': 'https://wikidata.org/Q3305213'}  # painting
+        }]
+        
+        # Mock get_painting_labels
+        with patch.object(self.creator, 'get_painting_labels', return_value={'title': 'Flower Painting', 'artist': 'Artist C'}):
+            # Set the queries attribute on the instance
+            self.creator.queries = mock_queries
+            
+            poem_analysis = {'themes': ['nature'], 'mood': 'peaceful'}
+            q_codes = ['Q11427']  # flower
+            
+            result = self.creator.fetch_artwork_by_subject_with_scoring(
+                poem_analysis, q_codes, count=1, min_score=0.4
+            )
+            
+            # Should return results with capped score
+            assert len(result) == 1
+            artwork, score = result[0]
+            assert score == 1.0  # Capped at 1.0 (0.8 + 0.5 = 1.3, capped to 1.0)
 
 
 if __name__ == '__main__':
