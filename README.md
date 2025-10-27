@@ -19,25 +19,44 @@ A Python application that fetches and displays famous paintings and random publi
 
 ### Project Structure
 
+The project has been refactored into focused, maintainable modules:
+
 ```
 daily-culture-bot/
-├── src/                    # Source code
-│   ├── daily_paintings.py  # Main script
-│   ├── datacreator.py      # Wikidata queries
-│   ├── poem_fetcher.py     # PoetryDB queries
-│   ├── poem_analyzer.py    # Theme analysis
-│   └── email_sender.py     # Email functionality
-├── tests/                  # Test files
-├── scripts/                # Utility scripts
-├── daily_culture_bot.py    # Entry point script
-└── requirements.txt        # Dependencies
+├── src/                           # Source code
+│   ├── daily_paintings.py         # Main orchestration script (395 lines)
+│   ├── datacreator.py             # High-level artwork orchestration (858 lines)
+│   ├── poem_analyzer.py           # Main poem analysis orchestration (470 lines)
+│   ├── poem_fetcher.py            # Poetry fetching from PoetryDB (582 lines)
+│   ├── email_sender.py            # Email composition and sending (541 lines)
+│   ├── wikidata_queries.py        # SPARQL queries to Wikidata (308 lines)
+│   ├── artwork_processor.py       # Artwork data processing (271 lines)
+│   ├── poem_themes.py             # Theme and emotion mappings (144 lines)
+│   ├── openai_analyzer.py         # OpenAI API integration (134 lines)
+│   └── wikidata_config.py         # Configuration constants (52 lines)
+├── tests/                         # Comprehensive test suites
+├── scripts/                       # Utility scripts
+├── daily_culture_bot.py           # Entry point script
+└── requirements.txt               # Dependencies
 ```
 
 ### Core Components
 
-- **`src/daily_paintings.py`** - Main script that fetches and displays artwork and poem information
-- **`src/datacreator.py`** - Data fetcher that queries Wikidata for paintings
-- **`src/poem_fetcher.py`** - Data fetcher that queries PoetryDB for random poems
+- **`src/daily_paintings.py`** - Main script that orchestrates the entire process
+- **`src/datacreator.py`** - High-level artwork data creation and orchestration
+- **`src/poem_analyzer.py`** - Main poem analysis orchestration
+- **`src/poem_fetcher.py`** - Fetches poems from PoetryDB API
+- **`src/email_sender.py`** - Handles email composition and sending
+
+### Specialized Modules
+
+- **`src/wikidata_queries.py`** - SPARQL queries to Wikidata for artwork data
+- **`src/artwork_processor.py`** - Artwork data processing and formatting
+- **`src/poem_themes.py`** - Theme and emotion mappings for poem analysis
+- **`src/openai_analyzer.py`** - OpenAI API integration for enhanced poem analysis
+- **`src/wikidata_config.py`** - Configuration constants and mappings
+
+This modular structure improves maintainability, testability, and code organization while keeping individual files focused and manageable.
 - **`src/poem_analyzer.py`** - Theme analysis and artwork matching for complementary mode
 - **`src/email_sender.py`** - Email functionality for sending artwork and poem content
 - **`daily_culture_bot.py`** - Convenient entry point script
