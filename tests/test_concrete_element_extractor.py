@@ -287,5 +287,239 @@ class TestIntegration:
             pytest.skip("spaCy model 'en_core_web_sm' not installed")
 
 
+class TestMapNounsToQCodes:
+    """Test Q-code mapping functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.extractor = ConcreteElementExtractor()
+        # Mock theme mappings for testing
+        self.extractor.theme_mappings = {
+            "nature": {"keywords": ["tree", "flower"], "q_codes": ["Q7860", "Q506"]},
+            "love": {"keywords": ["heart"], "q_codes": ["Q316"]}
+        }
+        self.extractor.object_mappings = {
+            "tree": {"q_codes": ["Q10884"], "keywords": ["tree"]},
+            "house": {"q_codes": ["Q3947"], "keywords": ["house"]}
+        }
+    
+    def test_map_nouns_to_q_codes_direct_mapping(self):
+        """Test mapping nouns using direct object mappings."""
+        nouns = ["tree", "house"]
+        result = self.extractor.map_nouns_to_q_codes(nouns)
+        
+        assert "Q10884" in result  # tree
+        assert "Q3947" in result   # house
+        assert len(result) == 2
+    
+    def test_map_nouns_to_q_codes_theme_mapping(self):
+        """Test mapping nouns using theme mappings."""
+        nouns = ["flower", "heart"]
+        result = self.extractor.map_nouns_to_q_codes(nouns)
+        
+        assert "Q506" in result     # flower from nature theme
+        assert "Q7860" in result    # flower from nature theme (second Q-code)
+        assert "Q316" in result      # heart from love theme
+        assert len(result) == 3     # Q7860, Q506, Q316
+    
+    def test_map_nouns_to_q_codes_mixed_mappings(self):
+        """Test mapping nouns using both direct and theme mappings."""
+        nouns = ["tree", "flower", "house"]
+        result = self.extractor.map_nouns_to_q_codes(nouns)
+        
+        assert "Q10884" in result  # tree (direct)
+        assert "Q506" in result     # flower (theme)
+        assert "Q7860" in result    # flower (theme - second Q-code)
+        assert "Q3947" in result    # house (direct)
+        assert len(result) == 4     # Q10884, Q7860, Q506, Q3947
+    
+    def test_map_nouns_to_q_codes_unknown_nouns(self):
+        """Test mapping with unknown nouns."""
+        nouns = ["unknown", "nonexistent"]
+        result = self.extractor.map_nouns_to_q_codes(nouns)
+        
+        assert result == []
+    
+    def test_map_nouns_to_q_codes_deduplication(self):
+        """Test that duplicate Q-codes are removed."""
+        # Mock overlapping mappings
+        self.extractor.object_mappings["flower"] = {"q_codes": ["Q506"], "keywords": ["flower"]}
+        nouns = ["flower"]  # Should map to Q506 from both direct and theme mappings
+        result = self.extractor.map_nouns_to_q_codes(nouns)
+        
+        assert result.count("Q506") == 1  # Should appear only once
+
+
+class TestCategorizeNouns:
+    """Test noun categorization functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.extractor = ConcreteElementExtractor()
+        self.mock_nlp = Mock()
+        self.extractor.nlp = self.mock_nlp
+    
+    def test_categorize_nouns_with_nlp(self):
+        """Test categorization when spaCy is available."""
+        # Mock spaCy document
+        mock_doc = Mock()
+        mock_token = Mock()
+        mock_token.pos_ = "NOUN"
+        mock_token.lemma_ = "tree"
+        mock_token.ent_type_ = ""
+        mock_token.is_stop = False
+        mock_doc.__iter__ = Mock(return_value=iter([mock_token]))
+        mock_doc.__len__ = Mock(return_value=1)
+        mock_doc.__getitem__ = Mock(return_value=mock_token)  # Make it subscriptable
+        self.mock_nlp.return_value = mock_doc
+        
+        nouns = ["tree"]
+        result = self.extractor.categorize_nouns(nouns)
+        
+        assert "tree" in result["natural_objects"]
+        assert result["man_made_objects"] == []
+        assert result["living_beings"] == []
+        assert result["abstract_concepts"] == []
+        assert result["settings"] == []
+    
+    def test_categorize_nouns_without_nlp(self):
+        """Test categorization when spaCy is not available."""
+        self.extractor.nlp = None
+        
+        nouns = ["tree", "house"]
+        result = self.extractor.categorize_nouns(nouns)
+        
+        # Should return empty structure when nlp is None
+        expected = {
+            "natural_objects": [],
+            "man_made_objects": [],
+            "living_beings": [],
+            "abstract_concepts": [],
+            "settings": []
+        }
+        assert result == expected
+    
+    def test_categorize_nouns_empty_document(self):
+        """Test categorization with empty spaCy document."""
+        mock_doc = Mock()
+        mock_doc.__len__ = Mock(return_value=0)
+        self.mock_nlp.return_value = mock_doc
+        
+        nouns = ["tree"]
+        result = self.extractor.categorize_nouns(nouns)
+        
+        # Should return empty structure when document is empty (no categorization)
+        expected = {
+            "natural_objects": [],
+            "man_made_objects": [],
+            "living_beings": [],
+            "abstract_concepts": [],
+            "settings": []
+        }
+        assert result == expected
+
+
+class TestExtractNarrativeElements:
+    """Test narrative element extraction functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.extractor = ConcreteElementExtractor()
+        self.mock_nlp = Mock()
+        self.extractor.nlp = self.mock_nlp
+    
+    def test_extract_narrative_elements_with_nlp(self):
+        """Test narrative extraction when spaCy is available."""
+        # Mock spaCy document with various tokens
+        mock_doc = Mock()
+        mock_tokens = []
+        
+        # Mock "I" pronoun
+        mock_i = Mock()
+        mock_i.pos_ = "PRON"
+        mock_i.text = "I"
+        mock_tokens.append(mock_i)
+        
+        # Mock "garden" noun
+        mock_garden = Mock()
+        mock_garden.pos_ = "NOUN"
+        mock_garden.text = "garden"
+        mock_tokens.append(mock_garden)
+        
+        mock_doc.__iter__ = Mock(return_value=iter(mock_tokens))
+        self.mock_nlp.return_value = mock_doc
+        
+        text = "I walked in the garden at dawn"
+        result = self.extractor.extract_narrative_elements(text)
+        
+        assert result["has_protagonist"] == True
+        assert result["protagonist_type"] == "human"
+        assert result["setting"] == "outdoor"  # garden keyword
+        assert result["time_of_day"] == "dawn"  # dawn keyword
+        assert result["human_presence"] == "central"  # "I" pronoun
+    
+    def test_extract_narrative_elements_without_nlp(self):
+        """Test narrative extraction when spaCy is not available."""
+        self.extractor.nlp = None
+        
+        text = "Some text"
+        result = self.extractor.extract_narrative_elements(text)
+        
+        expected = {
+            "has_protagonist": False,
+            "protagonist_type": "none",
+            "setting": "ambiguous",
+            "time_of_day": "ambiguous",
+            "season": "timeless",
+            "human_presence": "absent",
+            "weather": "ambiguous"
+        }
+        assert result == expected
+    
+    def test_extract_narrative_elements_empty_text(self):
+        """Test narrative extraction with empty text."""
+        mock_doc = Mock()
+        mock_doc.__iter__ = Mock(return_value=iter([]))
+        self.mock_nlp.return_value = mock_doc
+        
+        result = self.extractor.extract_narrative_elements("")
+        
+        assert result["has_protagonist"] == False
+        assert result["protagonist_type"] == "none"
+        assert result["setting"] == "ambiguous"
+        assert result["time_of_day"] == "ambiguous"
+        assert result["season"] == "timeless"
+        assert result["human_presence"] == "absent"
+        assert result["weather"] == "ambiguous"
+    
+    def test_extract_narrative_elements_season_detection(self):
+        """Test season detection in narrative elements."""
+        mock_doc = Mock()
+        mock_doc.__iter__ = Mock(return_value=iter([]))
+        self.mock_nlp.return_value = mock_doc
+        
+        # Test spring detection
+        result = self.extractor.extract_narrative_elements("spring flowers bloom")
+        assert result["season"] == "spring"
+        
+        # Test winter detection - use more specific winter keywords
+        result = self.extractor.extract_narrative_elements("winter cold frost")
+        assert result["season"] == "winter"
+    
+    def test_extract_narrative_elements_weather_detection(self):
+        """Test weather detection in narrative elements."""
+        mock_doc = Mock()
+        mock_doc.__iter__ = Mock(return_value=iter([]))
+        self.mock_nlp.return_value = mock_doc
+        
+        # Test stormy weather
+        result = self.extractor.extract_narrative_elements("stormy wind blows")
+        assert result["weather"] == "stormy"
+        
+        # Test clear weather
+        result = self.extractor.extract_narrative_elements("clear sunny day")
+        assert result["weather"] == "clear"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
