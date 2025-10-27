@@ -50,6 +50,14 @@ def parse_arguments():
                        help='Minimum match quality score 0.0-1.0 (default: 0.4)')
     parser.add_argument('--query-timeout', type=int, default=60,
                        help='Wikidata query timeout in seconds (default: 60)')
+    parser.add_argument('--no-vision', action='store_true',
+                       help='Disable GPT-4 Vision analysis for artwork images')
+    parser.add_argument('--no-multi-pass', action='store_true',
+                       help='Disable multi-pass analysis (skip AI-driven candidate selection)')
+    parser.add_argument('--candidate-count', type=int, default=20,
+                       help='Number of candidate artworks to fetch for multi-pass analysis (default: 20)')
+    parser.add_argument('--explain-matches', action='store_true',
+                       help='Generate detailed explanations for artwork-poem matches')
     
     args = parser.parse_args()
     
@@ -106,9 +114,19 @@ def main():
     poem_fetcher_instance = poem_fetcher.PoemFetcher(enable_poet_dates=not args.no_poet_dates)
     poem_analyzer_instance = poem_analyzer.PoemAnalyzer()
     
+    # Initialize match explainer for complementary mode
+    match_explainer = None
+    try:
+        from . import match_explainer
+        match_explainer = match_explainer.MatchExplainer()
+        print("✅ Match explainer initialized")
+    except ImportError:
+        print("⚠️ Match explainer not available")
+    
     paintings = []
     poems = []
     match_status = []  # Track which paintings were matched vs fallback
+    match_explanations = []  # Store match explanations for each artwork
     
     # Handle complementary mode (poems first, then match artwork)
     if args.complementary:
@@ -209,27 +227,135 @@ def main():
                 if poet_birth_year and poet_death_year:
                     print(f"🎭 Era-based matching enabled for poet: {poems[0].get('author')} ({poet_birth_year}-{poet_death_year})")
                 
-                # Try to fetch matching artwork with scoring system and era matching
-                scored_results = creator.fetch_artwork_by_subject_with_scoring(
+                # Multi-pass analysis: First pass - fetch candidates, Second pass - AI selection
+                if not args.no_multi_pass:
+                    print("🔄 Multi-pass analysis: Fetching candidate artworks...")
+                    
+                    # First pass: Fetch more candidates than needed for better selection
+                    candidate_count = max(args.count * 3, args.candidate_count)  # Use CLI flag or default
+                    print(f"📋 First pass: Fetching {candidate_count} candidate artworks...")
+                else:
+                    print("⚡ Single-pass analysis: Fetching artwork directly...")
+                    candidate_count = args.count
+                
+                # Pass vision analysis flag to the creator
+                enable_vision = not args.no_vision
+                if not enable_vision:
+                    print("🚫 Vision analysis disabled by --no-vision flag")
+                
+                scored_candidates = creator.fetch_artwork_by_subject_with_scoring(
                     poem_analysis=poem_analyses[0],
                     q_codes=all_q_codes, 
-                    count=args.count,
+                    count=candidate_count,
                     genres=emotion_genres if emotion_genres else None,
-                    min_score=args.min_match_score,
+                    min_score=args.min_match_score * 0.7,  # Lower threshold for candidates
                     max_sitelinks=args.max_fame_level,
                     poet_birth_year=poet_birth_year,
-                    poet_death_year=poet_death_year
+                    poet_death_year=poet_death_year,
+                    enable_vision_analysis=enable_vision
                 )
                 
-                if scored_results:
-                    paintings = [painting for painting, score in scored_results]
-                    scores = [score for painting, score in scored_results]
-                    match_status = ["matched"] * len(paintings)
-                    print(f"✅ Found {len(paintings)} high-quality matches (score >= {args.min_match_score})")
-                    for i, (painting, score) in enumerate(scored_results):
-                        print(f"   - {painting['title']} by {painting['artist']} (match score: {score:.2f})")
+                if scored_candidates:
+                    if not args.no_multi_pass:
+                        print(f"✅ First pass: Found {len(scored_candidates)} candidate artworks")
+                        
+                        # Second pass: AI-driven selection from candidates
+                        print("🤖 Second pass: AI-driven candidate selection...")
+                        
+                        # Import OpenAI analyzer for second pass
+                        try:
+                            from . import openai_analyzer
+                            openai_analyzer_instance = openai_analyzer.OpenAIAnalyzer(
+                                creator.openai_client if hasattr(creator, 'openai_client') else None,
+                                poem_analyzer_instance.theme_mappings,
+                                poem_analyzer_instance.emotion_mappings
+                            )
+                            
+                            # Extract candidate artworks (without scores for AI selection)
+                            candidate_artworks = [painting for painting, score in scored_candidates]
+                            
+                            # Use AI to select best matches
+                            ai_selections = openai_analyzer_instance.select_best_artwork_matches(
+                                poem=poems[0],
+                                candidates=candidate_artworks,
+                                count=args.count
+                            )
+                            
+                            if ai_selections:
+                                paintings = [artwork for artwork, reasoning in ai_selections]
+                                match_status = ["ai_selected"] * len(paintings)
+                                print(f"✅ Second pass: AI selected {len(paintings)} best matches")
+                                
+                                # Display AI reasoning
+                                for i, (artwork, reasoning) in enumerate(ai_selections):
+                                    print(f"   {i+1}. {artwork['title']} by {artwork['artist']}")
+                                    print(f"      AI reasoning: {reasoning}")
+                            else:
+                                # Fallback to top scored candidates
+                                paintings = [painting for painting, score in scored_candidates[:args.count]]
+                                match_status = ["scored"] * len(paintings)
+                                print(f"⚠️ AI selection failed, using top scored candidates")
+                            
+                        except Exception as e:
+                            print(f"⚠️ AI selection failed: {e}")
+                            # Fallback to top scored candidates
+                            paintings = [painting for painting, score in scored_candidates[:args.count]]
+                            match_status = ["scored"] * len(paintings)
+                            print(f"🔄 Fallback: Using top {len(paintings)} scored candidates")
+                    else:
+                        # Single-pass: Use top scored candidates directly
+                        paintings = [painting for painting, score in scored_candidates[:args.count]]
+                        match_status = ["scored"] * len(paintings)
+                        print(f"✅ Found {len(paintings)} high-quality matches")
+                        for i, (painting, score) in enumerate(scored_candidates[:args.count]):
+                            print(f"   - {painting['title']} by {painting['artist']} (match score: {score:.2f})")
+                    
+                    # Generate detailed match explanations for complementary mode
+                    if (match_explainer and poems and paintings and 
+                        (args.explain_matches or args.complementary)):
+                        print("📝 Generating detailed match explanations...")
+                        poem_analysis = poem_analyses[0]  # Use first poem analysis
+                        
+                        for i, painting in enumerate(paintings):
+                            try:
+                                # Calculate match score for explanation
+                                artwork_q_codes = painting.get('subject_q_codes', []) + painting.get('vision_q_codes', [])
+                                artwork_genres = painting.get('genre_q_codes', [])
+                                artwork_year = painting.get('year')
+                                
+                                match_score = poem_analyzer_instance.score_artwork_match(
+                                    poem_analysis,
+                                    artwork_q_codes,
+                                    artwork_genres,
+                                    artwork_year=artwork_year,
+                                    poet_birth_year=poet_birth_year,
+                                    poet_death_year=poet_death_year
+                                )
+                                
+                                # Generate explanation
+                                explanation = match_explainer.explain_match(
+                                    poem_analysis=poem_analysis,
+                                    artwork=painting,
+                                    score=match_score,
+                                    vision_analysis=painting.get('vision_analysis')
+                                )
+                                
+                                match_explanations.append(explanation)
+                                
+                                print(f"   📋 Explanation for {painting['title']}: {explanation['why_matched']}")
+                                
+                            except Exception as e:
+                                print(f"⚠️ Error generating explanation for {painting['title']}: {e}")
+                                match_explanations.append({
+                                    "match_score": 0.5,
+                                    "overall_assessment": "unknown",
+                                    "why_matched": "Explanation generation failed",
+                                    "specific_connections": [],
+                                    "concrete_matches": {},
+                                    "potential_tensions": []
+                                })
                 else:
-                    print(f"⚠️ No high-quality matches found (score >= {args.min_match_score}), using random obscure artwork")
+                    print(f"⚠️ No candidate artworks found, using random obscure artwork")
                     paintings = creator.fetch_paintings(count=args.count, max_sitelinks=args.max_fame_level)
                     match_status = ["fallback"] * len(paintings)
         else:
@@ -314,9 +440,16 @@ def main():
     # Save to JSON if requested
     if args.output:
         if paintings:
+            # Include match explanations in artwork output for complementary mode
+            output_data = paintings.copy()
+            if args.complementary and match_explanations:
+                for i, painting in enumerate(output_data):
+                    if i < len(match_explanations):
+                        painting['match_explanation'] = match_explanations[i]
+            
             output_filename = f"artwork_{date.today().strftime('%Y%m%d')}.json"
             with open(output_filename, 'w', encoding='utf-8') as f:
-                json.dump(paintings, f, indent=2, ensure_ascii=False)
+                json.dump(output_data, f, indent=2, ensure_ascii=False)
             print(f"📄 Artwork data saved to: {output_filename}")
         
         if poems:
@@ -324,6 +457,13 @@ def main():
             with open(poem_filename, 'w', encoding='utf-8') as f:
                 json.dump(poems, f, indent=2, ensure_ascii=False)
             print(f"📝 Poems data saved to: {poem_filename}")
+        
+        # Save match explanations separately if available
+        if args.complementary and match_explanations:
+            explanations_filename = f"match_explanations_{date.today().strftime('%Y%m%d')}.json"
+            with open(explanations_filename, 'w', encoding='utf-8') as f:
+                json.dump(match_explanations, f, indent=2, ensure_ascii=False)
+            print(f"📋 Match explanations saved to: {explanations_filename}")
     
     
     # Send email if requested
@@ -356,7 +496,8 @@ def main():
                 email_format=args.email_format,
                 match_status=match_status,
                 poem_analyses=poem_analyses,
-                image_paths=email_image_paths
+                image_paths=email_image_paths,
+                match_explanations=match_explanations if args.complementary else None
             )
             
             if success:
@@ -398,6 +539,23 @@ def main():
                 print(f"   🖼️ Local image: {image_paths[i]}")
             else:
                 print(f"   🖼️ Image URL: {painting['image']}")
+            
+            # Display match explanation for complementary mode
+            if args.complementary and i < len(match_explanations):
+                explanation = match_explanations[i]
+                print(f"   📋 Match Score: {explanation['match_score']:.2f} ({explanation['overall_assessment']})")
+                print(f"   💡 Why matched: {explanation['why_matched']}")
+                
+                if explanation.get('specific_connections'):
+                    print(f"   🔗 Connections: {', '.join(explanation['specific_connections'][:3])}")
+                
+                if explanation.get('concrete_matches', {}).get('shared_objects'):
+                    shared_objects = explanation['concrete_matches']['shared_objects']
+                    if shared_objects:
+                        print(f"   🎯 Shared elements: {', '.join(shared_objects[:3])}")
+                
+                if explanation.get('potential_tensions'):
+                    print(f"   ⚠️ Potential tensions: {', '.join(explanation['potential_tensions'][:2])}")
     
     # Display poem information
     if poems:
