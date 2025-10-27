@@ -284,7 +284,7 @@ class TestProcessPaintingData:
         result = creator.process_painting_data([])
         assert result == []
     
-    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    @patch('src.artwork_processor.ArtworkProcessor.get_painting_labels')
     def test_process_painting_data_with_data(self, mock_labels):
         """Test processing painting data."""
         mock_labels.return_value = {
@@ -299,7 +299,7 @@ class TestProcessPaintingData:
         
         creator = datacreator.PaintingDataCreator()
         
-        with patch.object(creator, 'get_high_res_image_url', return_value='http://example.com/img.jpg'):
+        with patch('src.artwork_processor.ArtworkProcessor.get_high_res_image_url', return_value='http://example.com/img.jpg'):
             with patch('time.sleep'):  # Mock sleep to speed up test
                 result = creator.process_painting_data(raw_data)
         
@@ -685,8 +685,8 @@ class TestProcessPaintingDataWithDates:
         """Set up test fixtures."""
         self.creator = datacreator.PaintingDataCreator()
     
-    @patch('src.datacreator.PaintingDataCreator.get_artwork_inception_date')
-    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    @patch('src.wikidata_queries.WikidataQueries.get_artwork_inception_date')
+    @patch('src.artwork_processor.ArtworkProcessor.get_painting_labels')
     def test_process_painting_data_with_date(self, mock_labels, mock_inception):
         """Test that process_painting_data populates year field from inception date."""
         # Mock labels response
@@ -716,8 +716,8 @@ class TestProcessPaintingDataWithDates:
         # Verify inception date was called
         mock_inception.assert_called_once_with('https://www.wikidata.org/wiki/Q455354')
     
-    @patch('src.datacreator.PaintingDataCreator.get_artwork_inception_date')
-    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    @patch('src.wikidata_queries.WikidataQueries.get_artwork_inception_date')
+    @patch('src.artwork_processor.ArtworkProcessor.get_painting_labels')
     def test_process_painting_data_no_date(self, mock_labels, mock_inception):
         """Test that process_painting_data handles missing dates gracefully."""
         mock_labels.return_value = {
@@ -739,8 +739,8 @@ class TestProcessPaintingDataWithDates:
         assert result[0]['year'] is None
         assert result[0]['title'] == "Test Painting"
     
-    @patch('src.datacreator.PaintingDataCreator.get_artwork_inception_date')
-    @patch('src.datacreator.PaintingDataCreator.get_painting_labels')
+    @patch('src.wikidata_queries.WikidataQueries.get_artwork_inception_date')
+    @patch('src.artwork_processor.ArtworkProcessor.get_painting_labels')
     def test_process_painting_data_inception_error(self, mock_labels, mock_inception):
         """Test that process_painting_data handles inception date errors gracefully."""
         mock_labels.return_value = {

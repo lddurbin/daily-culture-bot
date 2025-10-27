@@ -471,6 +471,7 @@ class TestOpenAIIntegration:
         # Set up analyzer with mocked client
         analyzer = poem_analyzer.PoemAnalyzer()
         analyzer.openai_client = mock_client
+        analyzer._reinitialize_openai_analyzer()
         
         poem = {
             "title": "Epitaph on her Son H. P.",
@@ -500,6 +501,7 @@ class TestOpenAIIntegration:
         
         analyzer = poem_analyzer.PoemAnalyzer()
         analyzer.openai_client = mock_client
+        analyzer._reinitialize_openai_analyzer()
         
         poem = {"title": "Test", "text": "Test poem"}
         
@@ -515,6 +517,7 @@ class TestOpenAIIntegration:
         
         analyzer = poem_analyzer.PoemAnalyzer()
         analyzer.openai_client = mock_client
+        analyzer._reinitialize_openai_analyzer()
         
         poem = {"title": "Test", "text": "Test poem"}
         
@@ -550,6 +553,7 @@ class TestOpenAIIntegration:
         
         analyzer = poem_analyzer.PoemAnalyzer()
         analyzer.openai_client = mock_client
+        analyzer._reinitialize_openai_analyzer()
         
         poem = {
             "title": "Epitaph on her Son H. P.",
