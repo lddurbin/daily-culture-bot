@@ -187,18 +187,28 @@ class TestFetchPaintings:
         # Should return empty list if no paintings found
         assert len(paintings) == 0
     
-    def test_fetch_paintings_count_limit(self):
+    @patch('src.datacreator.PaintingDataCreator.query_wikidata_paintings')
+    @patch('src.datacreator.PaintingDataCreator.process_painting_data')
+    def test_fetch_paintings_count_limit(self, mock_process, mock_query):
         """Test that fetch respects count limit."""
-        creator = datacreator.PaintingDataCreator()
+        mock_query.return_value = [
+            {'painting': {'value': 'url1'}, 'image': {'value': 'img1'}},
+            {'painting': {'value': 'url2'}, 'image': {'value': 'img2'}},
+            {'painting': {'value': 'url3'}, 'image': {'value': 'img3'}}
+        ]
+        mock_process.return_value = [
+            {'title': 'Test Painting 1', 'artist': 'Test Artist 1'},
+            {'title': 'Test Painting 2', 'artist': 'Test Artist 2'},
+            {'title': 'Test Painting 3', 'artist': 'Test Artist 3'}
+        ]
         
-        sample_paintings = creator.create_sample_paintings(count=5)
+        creator = datacreator.PaintingDataCreator()
         
         # Only fetch 2 paintings even if more are available
         paintings = creator.fetch_paintings(count=2)
         
-        # This might be 0 if API fails, or 2 if successful
-        # Just check it doesn't exceed count
-        assert len(paintings) <= 2
+        # Should respect the count limit
+        assert len(paintings) == 2
 
 
 class TestSaveToJson:
@@ -400,9 +410,11 @@ class TestQueryPaintingsBySubject:
         mock_process.assert_called_once()
     
     @patch('src.datacreator.PaintingDataCreator.query_artwork_by_subject')
-    def test_fetch_artwork_by_subject_no_results(self, mock_query):
+    @patch('src.datacreator.PaintingDataCreator.fetch_paintings')
+    def test_fetch_artwork_by_subject_no_results(self, mock_fetch, mock_query):
         """Test subject-based fetch with no results."""
         mock_query.return_value = []
+        mock_fetch.return_value = []
         
         creator = datacreator.PaintingDataCreator()
         paintings = creator.fetch_artwork_by_subject(['Q7860'], count=1)
@@ -534,14 +546,16 @@ class TestSitelinksFiltering:
         """Test that fetch_artwork_by_subject passes max_sitelinks parameter."""
         creator = datacreator.PaintingDataCreator()
         
-        with patch.object(creator, 'query_artwork_by_subject') as mock_query:
+        with patch.object(creator, 'query_artwork_by_subject') as mock_query, \
+             patch.object(creator, 'fetch_paintings') as mock_fetch:
             mock_query.return_value = []
+            mock_fetch.return_value = []
             
             creator.fetch_artwork_by_subject(['Q7860'], count=1, max_sitelinks=25)
             
-            # Verify max_sitelinks was passed to query method
-            mock_query.assert_called()
-            call_args = mock_query.call_args
+            # Verify max_sitelinks was passed to fetch_paintings (final fallback)
+            mock_fetch.assert_called()
+            call_args = mock_fetch.call_args
             assert call_args[1]['max_sitelinks'] == 25
 
 
