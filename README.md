@@ -1,11 +1,10 @@
 # Daily Culture Bot 🎨📝
 
-A Python application that fetches and displays famous paintings and random public domain poems. Features a modern HTML gallery for browsing multiple artworks with high-quality images and beautiful poetry from PoetryDB.
+A Python application that fetches and displays famous paintings and random public domain poems. Focuses on email delivery as the primary content delivery mechanism, with support for saving data locally.
 
 ## 🌟 Features
 
 - **🔍 Live Data Fetching**: Pulls fresh painting data from Wikidata and random poems from PoetryDB
-- **🎨 Modern HTML Gallery**: Beautiful, responsive gallery with dark theme and smooth animations
 - **📱 Multiple Artworks**: Fetch 1-10+ artworks in a single command
 - **📝 Poetry Integration**: Fetch random public domain poems alongside artwork
 - **🎯 Complementary Matching**: Match artwork to poem themes for enhanced cultural experience
@@ -49,7 +48,7 @@ daily-culture-bot/
 2. **Poetry Fetching**: `poem_fetcher.py` queries PoetryDB for random public domain poems
 3. **Random Selection**: Uses random offset to ensure different artworks and poems each time
 4. **Image Processing**: Downloads high-resolution images from Wikimedia Commons
-5. **Gallery Generation**: Creates modern HTML gallery with responsive design for both art and poetry
+5. **Email Delivery**: Sends beautifully formatted emails with artwork and poetry content
 6. **Data Export**: Saves artwork metadata, poem data to JSON and images locally
 
 ### Complementary Mode
@@ -77,7 +76,7 @@ When using the `--complementary` flag, the workflow changes to create meaningful
 
 4. **Intelligent Matching**: Only accepts artwork with quality scores above minimum threshold (default: 0.4)
 5. **Enhanced Fallback**: If no high-quality matches found, uses random obscure artwork instead of famous pieces
-6. **Visual Indicators**: HTML gallery shows match scores, emotional analysis, and quality indicators
+6. **Email Integration**: Sends matched artwork and poems via email with visual indicators
 
 **Supported Themes**: Nature, flowers, water, love, death, war, night, day, city, animals, seasons, and more.
 
@@ -230,14 +229,14 @@ python daily_culture_bot.py --save-image
 python daily_culture_bot.py --output --save-image
 ```
 
-### Multiple Artworks with HTML Gallery
+### Multiple Artworks
 ```bash
-python daily_culture_bot.py --count 5 --output --save-image --html
+python daily_culture_bot.py --count 5 --output --save-image
 ```
 
 ### Fetch Artwork and Poems Together
 ```bash
-python daily_culture_bot.py --poems --poem-count 2 --output --html
+python daily_culture_bot.py --poems --poem-count 2 --output
 ```
 
 ### Complementary Mode (Match Artwork to Poems)
@@ -246,19 +245,19 @@ python daily_culture_bot.py --poems --poem-count 2 --output --html
 python daily_culture_bot.py --complementary --output --save-image
 
 # Multiple poems with matched artwork
-python daily_culture_bot.py --complementary --poem-count 3 --html
+python daily_culture_bot.py --complementary --poem-count 3
 
 # Fast mode with complementary matching
-python daily_culture_bot.py --complementary --fast --html
+python daily_culture_bot.py --complementary --fast
 
 # High-quality matching with custom thresholds
 python daily_culture_bot.py --complementary --min-match-score 0.6 --max-fame-level 15
 
 # Very obscure artwork only (fame level 10)
-python daily_culture_bot.py --complementary --max-fame-level 10 --html
+python daily_culture_bot.py --complementary --max-fame-level 10
 
 # Relaxed matching (lower quality threshold)
-python daily_culture_bot.py --complementary --min-match-score 0.2 --html
+python daily_culture_bot.py --complementary --min-match-score 0.2
 ```
 
 ### Poems Only
@@ -268,13 +267,13 @@ python daily_culture_bot.py --poems-only --poem-count 3 --output
 
 ### Fast Mode (Sample Data Only)
 ```bash
-python daily_culture_bot.py --count 3 --fast --html
+python daily_culture_bot.py --count 3 --fast
 ```
 
 ### Disable Poet Date Fetching (Avoid Timeouts)
 ```bash
 # If Wikidata API is slow, disable poet date fetching for faster execution
-python daily_culture_bot.py --poems --no-poet-dates --html
+python daily_culture_bot.py --poems --no-poet-dates
 ```
 
 ### All Options
@@ -286,7 +285,6 @@ python daily_culture_bot.py --help
 - `--count, -c COUNT` - Number of artworks to fetch (default: 1)
 - `--output, -o` - Save artwork data to JSON file
 - `--save-image, -i` - Download and save artwork images
-- `--html` - Generate modern HTML gallery page
 - `--fast` - Skip API calls and use sample data (much faster)
 - `--poems, -p` - Also fetch random poems
 - `--poem-count COUNT` - Number of poems to fetch (default: 1)
@@ -472,7 +470,6 @@ The bot uses a simple, reliable approach:
 ✅ Selected 3 paintings
 📥 Downloading images...
 📄 Artwork data saved to: artwork_20251026.json
-🌐 HTML gallery saved to: artwork_gallery.html
 
 ================================================================================
 ARTWORK INFORMATION
@@ -495,20 +492,12 @@ ARTWORK INFORMATION
 
 ================================================================================
 ✅ Artwork information retrieved successfully!
-🌐 Open artwork_gallery.html in your browser to view the gallery!
 ```
 
 ### Generated Files
-- **`artwork_gallery.html`** - Modern, responsive gallery with dark theme
 - **`artwork_YYYYMMDD.json`** - Complete artwork metadata
 - **Individual image files** - High-quality artwork images
 
-### HTML Gallery Features
-- **🎨 Modern Design**: Dark theme with gradient accents and smooth animations
-- **📱 Responsive Layout**: Works perfectly on desktop, tablet, and mobile
-- **🖼️ High-Quality Images**: Full-resolution artwork images with hover effects
-- **⚡ Fast Loading**: Optimized CSS and lazy image loading
-- **🎯 Clean Interface**: Professional gallery layout with card-based design
 
 ## 🤖 Automation
 

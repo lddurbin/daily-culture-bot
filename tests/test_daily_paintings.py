@@ -22,7 +22,6 @@ class TestArgumentParsing:
             assert args.count == 1
             assert args.output == False
             assert args.save_image == False
-            assert args.html == False
             assert args.fast == False
     
     def test_output_flag(self):
@@ -43,11 +42,6 @@ class TestArgumentParsing:
             args = daily_paintings.parse_arguments()
             assert args.count == 5
     
-    def test_html_flag(self):
-        """Test --html flag."""
-        with patch('sys.argv', ['daily_paintings.py', '--html']):
-            args = daily_paintings.parse_arguments()
-            assert args.html == True
     
     def test_fast_flag(self):
         """Test --fast flag."""
@@ -197,103 +191,16 @@ class TestDownloadImage:
         assert result is None
 
 
-class TestGenerateHTMLGallery:
-    """Test HTML gallery generation."""
-    
-    def test_generate_html_gallery_basic(self):
-        """Test basic HTML gallery generation."""
-        paintings = [
-            {
-                'title': 'Test Painting 1',
-                'artist': 'Test Artist 1',
-                'year': '2020',
-                'style': 'Modern',
-                'medium': 'Oil',
-                'museum': 'Museum 1',
-                'origin': 'Country 1',
-                'image': 'http://example.com/image1.jpg',
-                'wikidata': 'http://wikidata.org/Q1'
-            },
-            {
-                'title': 'Test Painting 2',
-                'artist': 'Test Artist 2',
-                'year': '2021',
-                'style': 'Classical',
-                'medium': 'Watercolor',
-                'museum': 'Museum 2',
-                'origin': 'Country 2',
-                'image': 'http://example.com/image2.jpg',
-                'wikidata': 'http://wikidata.org/Q2'
-            }
-        ]
-        
-        with patch('builtins.open', mock_open()) as mock_file:
-            result = daily_paintings.generate_html_gallery(paintings, [None, None], match_status=["random", "random"])
-            assert result == 'artwork_gallery.html'
-            mock_file.assert_called_once()
-    
-    def test_generate_html_gallery_with_image_paths(self):
-        """Test HTML gallery generation with local image paths."""
-        paintings = [
-            {
-                'title': 'Test Painting',
-                'artist': 'Test Artist',
-                'year': '2020',
-                'style': 'Modern',
-                'medium': 'Oil',
-                'museum': 'Museum',
-                'origin': 'Country',
-                'image': 'http://example.com/image.jpg',
-                'wikidata': 'http://wikidata.org/Q1'
-            }
-        ]
-        
-        image_paths = ['./Test_Painting_2020.jpg']
-        
-        with patch('builtins.open', mock_open()) as mock_file:
-            result = daily_paintings.generate_html_gallery(paintings, image_paths, match_status=["random"])
-            assert result == 'artwork_gallery.html'
-    
-    def test_generate_html_gallery_check_content(self):
-        """Test that generated HTML contains expected content."""
-        paintings = [
-            {
-                'title': 'Test Painting',
-                'artist': 'Test Artist',
-                'year': '2020',
-                'style': 'Modern',
-                'medium': 'Oil',
-                'museum': 'Museum',
-                'origin': 'Country',
-                'image': 'http://example.com/image.jpg',
-                'wikidata': 'http://wikidata.org/Q1'
-            }
-        ]
-        
-        m = mock_open()
-        with patch('builtins.open', m):
-            daily_paintings.generate_html_gallery(paintings, [None], match_status=["random"])
-            
-            # Get the content that was written
-            written_content = ''.join(call.args[0] for call in m().write.call_args_list)
-            
-            # Check that important content is present
-            assert 'Test Painting' in written_content
-            assert 'Test Artist' in written_content
-            assert 'Daily Artwork Gallery' in written_content
-            assert '<html' in written_content.lower()
-            assert date.today().strftime('%B %d, %Y') in written_content
 
 
 class TestComplementaryMode:
     """Test complementary mode functionality."""
     
-    @patch('daily_paintings.generate_html_gallery')
     @patch('daily_paintings.download_image')
     @patch('src.datacreator.PaintingDataCreator')
     @patch('src.poem_fetcher.PoemFetcher')
     @patch('src.poem_analyzer.PoemAnalyzer')
-    def test_complementary_mode_workflow(self, mock_analyzer_class, mock_poem_fetcher_class, mock_creator_class, mock_download, mock_html):
+    def test_complementary_mode_workflow(self, mock_analyzer_class, mock_poem_fetcher_class, mock_creator_class, mock_download):
         """Test complementary mode workflow."""
         # Setup mocks
         mock_creator = Mock()
@@ -328,7 +235,6 @@ class TestComplementaryMode:
         ]
         
         mock_download.return_value = './test.jpg'
-        mock_html.return_value = 'test.html'
         
         with patch('sys.argv', ['daily_paintings.py', '--complementary', '--fast']):
             with patch('builtins.open', mock_open()):
@@ -395,10 +301,9 @@ class TestComplementaryMode:
 class TestMain:
     """Test main function integration."""
     
-    @patch('daily_paintings.generate_html_gallery')
     @patch('daily_paintings.download_image')
     @patch('src.datacreator.PaintingDataCreator')
-    def test_main_fast_mode(self, mock_creator_class, mock_download, mock_html):
+    def test_main_fast_mode(self, mock_creator_class, mock_download):
         """Test main function with fast mode."""
         # Setup mocks
         mock_creator = Mock()
@@ -417,7 +322,6 @@ class TestMain:
         ]
         mock_creator_class.return_value = mock_creator
         mock_download.return_value = './test.jpg'
-        mock_html.return_value = 'test.html'
         
         with patch('sys.argv', ['daily_paintings.py', '--fast', '--count', '1']):
             with patch('builtins.open', mock_open()):
@@ -425,10 +329,9 @@ class TestMain:
         
         mock_creator.create_sample_paintings.assert_called_once_with(1)
     
-    @patch('daily_paintings.generate_html_gallery')
     @patch('daily_paintings.download_image')
     @patch('src.datacreator.PaintingDataCreator')
-    def test_main_with_output_flag(self, mock_creator_class, mock_download, mock_html):
+    def test_main_with_output_flag(self, mock_creator_class, mock_download):
         """Test main function with --output flag."""
         mock_creator = Mock()
         mock_creator.create_sample_paintings.return_value = [

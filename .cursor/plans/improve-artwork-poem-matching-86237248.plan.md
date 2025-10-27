@@ -160,9 +160,9 @@ SMTP_USERNAME=your-email@example.com
 SMTP_PASSWORD=your-app-password
 ```
 
-### 6. Enhance HTML Gallery Display
+### 6. Enhance Email Display
 
-**Update match status badges:**
+**Update email content to show emotion-based match indicators:**
 
 - Add "AI-Matched" badge for OpenAI-analyzed matches
 - Add "Emotion-Matched" indicator showing which emotions were matched
@@ -256,6 +256,6 @@ python daily_culture_bot.py --complementary --email user@example.com
 - [ ] Enhance query_paintings_by_subject() to include genre filtering
 - [ ] Update complementary mode in daily_paintings.py to use emotion-aware analysis
 - [ ] Add OPENAI_API_KEY environment variable handling with graceful degradation
-- [ ] Update HTML gallery to show emotion-based match indicators and AI analysis status
+- [ ] Update email content to show emotion-based match indicators and AI analysis status
 - [ ] Add tests for OpenAI integration, emotion detection, and emotion-aware matching
 - [ ] Document OpenAI setup, emotion-aware matching, and provide examples
