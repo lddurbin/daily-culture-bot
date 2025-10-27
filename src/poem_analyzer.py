@@ -309,6 +309,59 @@ class PoemAnalyzer:
         else:
             return f"Themes: {', '.join(themes[:-1])}, and {themes[-1]}"
     
+    def calculate_era_score(self, poet_birth_year: Optional[int], poet_death_year: Optional[int], 
+                           artwork_year: Optional[int]) -> Optional[float]:
+        """
+        Calculate era score based on temporal distance between poet's lifetime and artwork.
+        Returns 0.0-1.0 score or None if dates are unavailable.
+        
+        Args:
+            poet_birth_year: Year poet was born
+            poet_death_year: Year poet died
+            artwork_year: Year artwork was created
+            
+        Returns:
+            Float score 0.0-1.0 or None if dates unavailable
+        """
+        # Return None if any dates are missing
+        if any(x is None for x in [poet_birth_year, poet_death_year, artwork_year]):
+            return None
+        
+        buffer_years = 50
+        
+        # Perfect match: artwork created during poet's lifetime
+        if poet_birth_year <= artwork_year <= poet_death_year:
+            return 1.0
+        
+        # Calculate distance from nearest lifetime boundary
+        if artwork_year < poet_birth_year:
+            distance = poet_birth_year - artwork_year
+        else:  # artwork_year > poet_death_year
+            distance = artwork_year - poet_death_year
+        
+        # Linear decay within buffer zone
+        if distance <= buffer_years:
+            # Linear decay from 1.0 to 0.5 within buffer
+            return 1.0 - (distance / buffer_years) * 0.5
+        
+        # Outside buffer zone
+        return 0.0
+    
+    def estimate_poet_era(self, poem: Dict) -> Optional[Dict[str, int]]:
+        """
+        Estimate poet's era based on poem characteristics.
+        For now, returns None as this is a placeholder for future enhancement.
+        
+        Args:
+            poem: Poem dictionary
+            
+        Returns:
+            Dictionary with 'birth_year' and 'death_year' or None
+        """
+        # TODO: Implement estimation based on language patterns, themes, etc.
+        # For now, return None to gracefully fall back to visual-only matching
+        return None
+    
     def analyze_multiple_poems(self, poems: List[Dict]) -> List[Dict]:
         """Analyze multiple poems and return list of analysis results."""
         return [self.analyze_poem(poem) for poem in poems]
@@ -334,7 +387,9 @@ class PoemAnalyzer:
         
         return unique_q_codes
     
-    def score_artwork_match(self, poem_analysis: Dict, artwork_q_codes: List[str], artwork_genres: List[str]) -> float:
+    def score_artwork_match(self, poem_analysis: Dict, artwork_q_codes: List[str], 
+                           artwork_genres: List[str], artwork_year: Optional[int] = None,
+                           poet_birth_year: Optional[int] = None, poet_death_year: Optional[int] = None) -> float:
         """
         Score how well an artwork matches a poem's emotional and thematic profile.
         Returns score from 0.0 (poor match) to 1.0 (excellent match).
@@ -343,6 +398,9 @@ class PoemAnalyzer:
             poem_analysis: Dictionary containing poem analysis results
             artwork_q_codes: List of Q-codes associated with the artwork
             artwork_genres: List of genre Q-codes for the artwork
+            artwork_year: Optional year artwork was created
+            poet_birth_year: Optional year poet was born
+            poet_death_year: Optional year poet died
             
         Returns:
             Float score between 0.0 and 1.0
@@ -438,7 +496,17 @@ class PoemAnalyzer:
         if avoid_conflicts > 0:
             score *= 0.5  # Halve the score if there are conflicts
         
-        return min(score, 1.0)  # Cap at 1.0
+        # Calculate era score if dates are available
+        era_score = self.calculate_era_score(poet_birth_year, poet_death_year, artwork_year)
+        
+        if era_score is not None:
+            # Combine visual/thematic score (80% weight) with era score (20% weight)
+            # era_score is already 0.0-1.0, so we just combine
+            final_score = (score * 0.8) + (era_score * 0.2)
+            return min(final_score, 1.0)  # Cap at 1.0
+        else:
+            # No era data available, return visual/thematic score only
+            return min(score, 1.0)  # Cap at 1.0
 
 
 def main():
