@@ -202,14 +202,23 @@ def main():
                 paintings = creator.create_sample_paintings(args.count)
                 match_status = ["sample"] * len(paintings)
             else:
-                # Try to fetch matching artwork with scoring system
+                # Extract poet dates from poem for era-based matching
+                poet_birth_year = poems[0].get('poet_birth_year')
+                poet_death_year = poems[0].get('poet_death_year')
+                
+                if poet_birth_year and poet_death_year:
+                    print(f"🎭 Era-based matching enabled for poet: {poems[0].get('author')} ({poet_birth_year}-{poet_death_year})")
+                
+                # Try to fetch matching artwork with scoring system and era matching
                 scored_results = creator.fetch_artwork_by_subject_with_scoring(
                     poem_analysis=poem_analyses[0],
                     q_codes=all_q_codes, 
                     count=args.count,
                     genres=emotion_genres if emotion_genres else None,
                     min_score=args.min_match_score,
-                    max_sitelinks=args.max_fame_level
+                    max_sitelinks=args.max_fame_level,
+                    poet_birth_year=poet_birth_year,
+                    poet_death_year=poet_death_year
                 )
                 
                 if scored_results:
@@ -370,7 +379,19 @@ def main():
         print("="*80)
         
         for i, painting in enumerate(paintings):
-            print(f"\n{i+1}. 🎨 {painting['title']} by {painting['artist']} ({painting['year']})")
+            year_str = str(painting.get('year', 'Unknown')) if painting.get('year') else 'Unknown'
+            
+            # Add era match info if we have poet dates
+            era_info = ""
+            if args.complementary and poems and len(poems) > 0:
+                poet_birth = poems[0].get('poet_birth_year')
+                poet_death = poems[0].get('poet_death_year')
+                poem_author = poems[0].get('author')
+                
+                if poet_birth and poet_death and painting.get('year'):
+                    era_info = f" (era match with {poem_author}: {poet_birth}-{poet_death})"
+            
+            print(f"\n{i+1}. 🎨 {painting['title']} by {painting['artist']} ({year_str}{era_info})")
             print(f"   Style: {painting['style']} | Medium: {painting['medium']}")
             print(f"   Museum: {painting['museum']} | Origin: {painting['origin']}")
             if i < len(image_paths) and image_paths[i]:

@@ -540,43 +540,5 @@ class PoemFetcher:
             return None
 
 
-def main():
-    """
-    Main function to demonstrate the poem fetcher functionality.
-    """
-    fetcher = PoemFetcher()
-    
-    print("Daily Culture Bot - Poem Fetcher")
-    print("=" * 40)
-    
-    # Get user input for number of poems
-    try:
-        count = int(input("How many poems would you like to fetch? (default: 1): ") or "1")
-    except ValueError:
-        count = 1
-    
-    # Fetch poems
-    poems = fetcher.fetch_random_poems(count)
-    
-    if poems:
-        print(f"\nSuccessfully fetched {len(poems)} poem{'s' if len(poems) != 1 else ''}!")
-        
-        # Save to JSON
-        filename = fetcher.save_poems_to_json(poems)
-        
-        # Display poems
-        print("\n" + "="*80)
-        print("POEM INFORMATION")
-        print("="*80)
-        
-        for i, poem in enumerate(poems):
-            print(f"\n{i+1}. 📝 {poem['title']} by {poem['author']}")
-            print(f"   Lines: {poem['line_count']} | Source: {poem['source']}")
-            print(f"   Text preview: {poem['text'][:100]}...")
-    
-    else:
-        print("No poems were fetched. Please check your internet connection and try again.")
-
-
-if __name__ == "__main__":
-    main()
+# CLI entry point moved to daily_culture_bot.py
+# Use: python daily_culture_bot.py --poems-only
