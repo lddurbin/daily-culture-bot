@@ -465,7 +465,7 @@ class TestOpenAIIntegration:
         # Mock API response
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = '{"emotions": ["grief", "melancholy"], "themes": ["death", "loss"], "mood": "somber", "intensity": 8, "visual_suggestions": ["mourning scenes", "solitary figures"]}'
+        mock_response.choices[0].message.content = '{"primary_emotions": ["grief", "melancholy"], "secondary_emotions": [], "emotional_tone": "somber", "themes": ["death", "loss"], "intensity": 8, "subject_suggestions": ["mourning scenes", "solitary figures"]}'
         mock_client.chat.completions.create.return_value = mock_response
         
         # Set up analyzer with mocked client
@@ -479,11 +479,11 @@ class TestOpenAIIntegration:
         
         result = analyzer.analyze_poem_with_ai(poem)
         
-        assert result["emotions"] == ["grief", "melancholy"]
+        assert result["primary_emotions"] == ["grief", "melancholy"]
         assert result["themes"] == ["death", "loss"]
-        assert result["mood"] == "somber"
+        assert result["emotional_tone"] == "somber"
         assert result["intensity"] == 8
-        assert "mourning scenes" in result["visual_suggestions"]
+        assert "mourning scenes" in result["subject_suggestions"]
         assert len(result["q_codes"]) > 0  # Should have Q-codes for grief/death
     
     @patch('src.poem_analyzer.OpenAI')
@@ -545,7 +545,7 @@ class TestOpenAIIntegration:
         
         mock_response = Mock()
         mock_response.choices = [Mock()]
-        mock_response.choices[0].message.content = '{"emotions": ["grief"], "themes": ["death"], "mood": "somber", "intensity": 9, "visual_suggestions": ["mourning scenes"]}'
+        mock_response.choices[0].message.content = '{"primary_emotions": ["grief"], "secondary_emotions": [], "emotional_tone": "somber", "themes": ["death"], "intensity": 9, "subject_suggestions": ["mourning scenes"]}'
         mock_client.chat.completions.create.return_value = mock_response
         
         analyzer = poem_analyzer.PoemAnalyzer()
@@ -561,7 +561,7 @@ class TestOpenAIIntegration:
         assert result["analysis_method"] == "ai_enhanced"
         assert "grief" in result["emotions"]
         assert "death" in result["themes"]
-        assert result["mood"] == "somber"
+        assert result["emotional_tone"] == "somber"
         assert result["intensity"] == 9
 
 
@@ -646,10 +646,10 @@ class TestScoringSystem:
         score = analyzer.score_artwork_match({}, ["Q4"], ["Q134307"])
         assert score == 0.0
         
-        # Empty artwork Q-codes
+        # Empty artwork Q-codes but with genres should get neutral genre score
         poem_analysis = {"primary_emotions": ["grief"], "themes": ["death"]}
         score = analyzer.score_artwork_match(poem_analysis, [], ["Q134307"])
-        assert score == 0.0
+        assert score >= 0.1  # Should get neutral genre score
     
     def test_score_artwork_match_primary_emotion(self):
         """Test scoring for primary emotion matches."""
