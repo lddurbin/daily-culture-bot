@@ -18,6 +18,26 @@ try:
 except ImportError:
     OpenAI = None
 
+# Import theme mappings
+try:
+    from . import poem_themes
+except ImportError:
+    # Fallback for when running as standalone module
+    try:
+        import poem_themes
+    except ImportError:
+        poem_themes = None
+
+# Import OpenAI analyzer
+try:
+    from . import openai_analyzer
+except ImportError:
+    # Fallback for when running as standalone module
+    try:
+        import openai_analyzer
+    except ImportError:
+        openai_analyzer = None
+
 
 class PoemAnalyzer:
     def __init__(self):
@@ -33,144 +53,36 @@ class PoemAnalyzer:
                 self.openai_client = None
         else:
             print("ℹ️ OpenAI API key not found, using keyword-based analysis only")
-        # Theme keywords and their corresponding Wikidata Q-codes
-        self.theme_mappings = {
-            "nature": {
-                "keywords": [
-                    "nature", "natural", "wild", "wilderness", "forest", "wood", "woods",
-                    "tree", "trees", "leaf", "leaves", "green", "earth", "ground", "land",
-                    "countryside", "country", "rural", "pastoral", "meadow", "field", "fields"
-                ],
-                "q_codes": ["Q7860", "Q23397", "Q1640824"]  # nature, landscape, floral painting
-            },
-            "flowers": {
-                "keywords": [
-                    "flower", "flowers", "bloom", "blooms", "blossom", "blossoms", "petal", "petals",
-                    "rose", "roses", "daffodil", "daffodils", "lily", "lilies", "tulip", "tulips",
-                    "garden", "gardens", "floral", "botanical", "spring", "springtime"
-                ],
-                "q_codes": ["Q506", "Q1640824", "Q16538"]  # flower, floral painting, romantic
-            },
-            "water": {
-                "keywords": [
-                    "water", "sea", "ocean", "lake", "river", "stream", "brook", "pond", "pool",
-                    "wave", "waves", "tide", "tides", "rain", "rainy", "storm", "storms",
-                    "sail", "sailing", "boat", "boats", "ship", "ships", "fishing", "fisherman"
-                ],
-                "q_codes": ["Q283", "Q16970", "Q131681", "Q18811"]  # water, sea, seascape, battle
-            },
-            "love": {
-                "keywords": [
-                    "love", "loved", "loving", "beloved", "heart", "hearts", "romance", "romantic",
-                    "kiss", "kisses", "embrace", "embraces", "passion", "passionate", "desire",
-                    "affection", "tender", "sweet", "dear", "darling", "lover", "lovers"
-                ],
-                "q_codes": ["Q316", "Q16538", "Q506"]  # love, romantic, flower
-            },
-            "death": {
-                "keywords": [
-                    "death", "die", "dies", "died", "dying", "dead", "grave", "graves", "burial",
-                    "funeral", "mourning", "grief", "sorrow", "sad", "sadness", "tears", "weep",
-                    "weeping", "memorial", "remembrance", "ghost", "ghosts", "spirit", "spirits",
-                    "dust", "ashes", "epitaph", "tomb", "cemetery"
-                ],
-                "q_codes": ["Q4", "Q198", "Q18811"]  # death, war, battle
-            },
-            "war": {
-                "keywords": [
-                    "war", "wars", "warfare", "battle", "battles", "fight", "fighting", "soldier",
-                    "soldiers", "army", "armies", "weapon", "weapons", "sword", "swords", "gun",
-                    "guns", "bomb", "bombs", "conflict", "conflicts", "struggle", "struggles"
-                ],
-                "q_codes": ["Q198", "Q18811", "Q4"]  # war, battle, death
-            },
-            "night": {
-                "keywords": [
-                    "night", "nights", "dark", "darkness", "midnight", "evening", "evenings",
-                    "dusk", "twilight", "moon", "moonlight", "stars", "starry", "sleep", "sleeping",
-                    "dream", "dreams", "dreaming", "shadow", "shadows", "black"
-                ],
-                "q_codes": ["Q183", "Q111", "Q12133"]  # night, darkness, sleep
-            },
-            "day": {
-                "keywords": [
-                    "day", "days", "morning", "mornings", "dawn", "sunrise", "sun", "sunny",
-                    "bright", "light", "lightness", "daylight", "noon", "afternoon", "golden",
-                    "yellow", "warm", "warmth", "clear", "blue", "sky", "skies"
-                ],
-                "q_codes": ["Q111", "Q525", "Q12133"]  # day, sun, light
-            },
-            "city": {
-                "keywords": [
-                    "city", "cities", "urban", "town", "towns", "street", "streets", "road", "roads",
-                    "building", "buildings", "house", "houses", "home", "homes", "window", "windows",
-                    "door", "doors", "wall", "walls", "roof", "roofs", "crowd", "crowds", "people"
-                ],
-                "q_codes": ["Q515", "Q395", "Q18811"]  # city, building, battle
-            },
-            "animals": {
-                "keywords": [
-                    "animal", "animals", "bird", "birds", "dog", "dogs", "cat", "cats", "horse",
-                    "horses", "cow", "cows", "sheep", "lamb", "lambs", "wolf", "wolves", "lion",
-                    "lions", "eagle", "eagles", "swan", "swans", "butterfly", "butterflies"
-                ],
-                "q_codes": ["Q729", "Q5113", "Q1640824"]  # animal, bird, floral painting
-            },
-            "seasons": {
-                "keywords": [
-                    "spring", "summer", "autumn", "fall", "winter", "season", "seasons", "year",
-                    "years", "time", "times", "change", "changes", "new", "old", "young", "age"
-                ],
-                "q_codes": ["Q395", "Q12133", "Q23397"]  # building, light, landscape
-            }
-        }
         
-        # Emotion-aware mappings for better artwork matching
-        self.emotion_mappings = {
-            "grief": {
-                "q_codes": ["Q4", "Q203", "Q2912397", "Q3305213"],  # death, mourning, memorial, painting
-                "genres": ["Q134307", "Q2839016"],  # portrait, religious painting
-                "keywords": ["mourning", "memorial", "sorrow", "loss", "burial", "pietà", "funeral", "grave"]
-            },
-            "melancholy": {
-                "q_codes": ["Q183", "Q8886", "Q35127"],  # night, loneliness, solitude
-                "genres": ["Q191163", "Q40446"],  # landscape, nocturne
-                "keywords": ["solitary", "twilight", "contemplative", "pensive", "sad", "blue", "lonely"]
-            },
-            "joy": {
-                "q_codes": ["Q2385804", "Q8274", "Q1068639"],  # celebration, dance, festival
-                "genres": ["Q16875712", "Q1640824"],  # genre painting, floral painting
-                "keywords": ["celebration", "dance", "festive", "bright", "colorful", "happy", "merry"]
-            },
-            "peace": {
-                "q_codes": ["Q23397", "Q35127", "Q483130"],  # landscape, solitude, pastoral
-                "genres": ["Q191163", "Q1640824"],  # landscape, still life
-                "keywords": ["pastoral", "serene", "calm", "quiet", "peaceful", "tranquil", "gentle"]
-            },
-            "love": {
-                "q_codes": ["Q316", "Q16538", "Q506"],  # love, romantic, flower
-                "genres": ["Q134307", "Q1640824"],  # portrait, floral painting
-                "keywords": ["romance", "passion", "tender", "sweet", "beloved", "heart", "kiss"]
-            },
-            "hope": {
-                "q_codes": ["Q111", "Q525", "Q12133"],  # day, sun, light
-                "genres": ["Q191163", "Q1640824"],  # landscape, floral painting
-                "keywords": ["dawn", "morning", "bright", "promise", "future", "renewal", "spring"]
-            },
-            "despair": {
-                "q_codes": ["Q183", "Q4", "Q8886"],  # night, death, loneliness
-                "genres": ["Q191163", "Q134307"],  # landscape, portrait
-                "keywords": ["dark", "hopeless", "empty", "void", "end", "nothing", "lost"]
-            },
-            "nostalgia": {
-                "q_codes": ["Q23397", "Q35127", "Q395"],  # landscape, solitude, building
-                "genres": ["Q191163", "Q134307"],  # landscape, portrait
-                "keywords": ["memory", "past", "old", "remember", "childhood", "home", "familiar"]
-            }
-        }
+        # Import theme mappings from separate module
+        if poem_themes:
+            self.theme_mappings = poem_themes.THEME_MAPPINGS
+            self.emotion_mappings = poem_themes.EMOTION_MAPPINGS
+        else:
+            # Fallback if module not available
+            self.theme_mappings = {}
+            self.emotion_mappings = {}
+            print("⚠️ Warning: poem_themes module not available, theme analysis disabled")
+        
+        # Initialize OpenAI analyzer if available
+        if openai_analyzer and self.openai_client:
+            self.openai_analyzer = openai_analyzer.OpenAIAnalyzer(
+                self.openai_client, self.theme_mappings, self.emotion_mappings
+            )
+        else:
+            self.openai_analyzer = None
+            if not openai_analyzer:
+                print("⚠️ Warning: openai_analyzer module not available")
         
         # Compile regex patterns for better performance
         self._compile_patterns()
+    
+    def _reinitialize_openai_analyzer(self):
+        """Reinitialize the OpenAI analyzer when client is set in tests."""
+        if openai_analyzer and self.openai_client:
+            self.openai_analyzer = openai_analyzer.OpenAIAnalyzer(
+                self.openai_client, self.theme_mappings, self.emotion_mappings
+            )
     
     def _compile_patterns(self):
         """Compile regex patterns for theme detection."""
@@ -255,101 +167,11 @@ class PoemAnalyzer:
         Returns:
             Dictionary with AI analysis results
         """
-        if not self.openai_client:
-            raise ValueError("OpenAI client not initialized")
-        
-        title = poem.get('title', '')
-        text = poem.get('text', '')
-        full_text = f"{title}\n\n{text}".strip()
-        
-        prompt = f"""You are an expert in analyzing poetry for visual art pairing. Analyze this poem and return ONLY a JSON object with the following structure:
-
-{{
-  "primary_emotions": ["emotion1", "emotion2"],  // Top 2-3 dominant emotions
-  "secondary_emotions": ["emotion3"],  // Supporting emotions
-  "emotional_tone": "playful|serious|ironic|melancholic|celebratory|contemplative",
-  "themes": ["theme1", "theme2"],  // Core subjects
-  "imagery_type": "concrete|abstract|symbolic|literal",
-  "visual_aesthetic": {{
-    "mood": "light|dark|dramatic|serene|turbulent",
-    "color_palette": "warm|cool|muted|vibrant|monochrome",
-    "composition": "intimate|expansive|chaotic|ordered"
-  }},
-  "subject_suggestions": ["specific artwork subjects that match the poem's feeling and content"],
-  "intensity": 1-10,
-  "avoid_subjects": ["subjects that would clash with the poem's tone"]
-}}
-
-Poem:
-{full_text}
-
-Return ONLY valid JSON with no additional text."""
-        
-        try:
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are an expert poetry analyst. Analyze poems for emotions, themes, and visual art suggestions. Always return valid JSON."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=500,
-                temperature=0.3
-            )
-            
-            content = response.choices[0].message.content.strip()
-            
-            # Parse JSON response
-            try:
-                ai_result = json.loads(content)
-            except json.JSONDecodeError:
-                # Try to extract JSON from response if it's wrapped in text
-                import re
-                json_match = re.search(r'\{[^}]+\}', content)
-                if json_match:
-                    ai_result = json.loads(json_match.group())
-                else:
-                    raise ValueError("Could not parse JSON from OpenAI response")
-            
-            # Map emotions and themes to Q-codes
-            primary_emotions = ai_result.get("primary_emotions", [])
-            secondary_emotions = ai_result.get("secondary_emotions", [])
-            themes = ai_result.get("themes", [])
-            
-            q_codes = []
-            
-            # Add Q-codes for primary emotions (higher weight)
-            for emotion in primary_emotions:
-                if emotion.lower() in self.emotion_mappings:
-                    q_codes.extend(self.emotion_mappings[emotion.lower()]["q_codes"])
-            
-            # Add Q-codes for secondary emotions (lower weight)
-            for emotion in secondary_emotions:
-                if emotion.lower() in self.emotion_mappings:
-                    q_codes.extend(self.emotion_mappings[emotion.lower()]["q_codes"])
-            
-            # Add Q-codes for themes
-            for theme in themes:
-                if theme.lower() in self.theme_mappings:
-                    q_codes.extend(self.theme_mappings[theme.lower()]["q_codes"])
-            
-            # Remove duplicates
-            q_codes = list(set(q_codes))
-            
-            return {
-                "primary_emotions": primary_emotions,
-                "secondary_emotions": secondary_emotions,
-                "emotional_tone": ai_result.get("emotional_tone", "unknown"),
-                "themes": themes,
-                "imagery_type": ai_result.get("imagery_type", "concrete"),
-                "visual_aesthetic": ai_result.get("visual_aesthetic", {}),
-                "subject_suggestions": ai_result.get("subject_suggestions", []),
-                "intensity": ai_result.get("intensity", 5),
-                "avoid_subjects": ai_result.get("avoid_subjects", []),
-                "q_codes": q_codes
-            }
-            
-        except Exception as e:
-            raise ValueError(f"OpenAI API error: {e}")
+        """Delegate to openai_analyzer module."""
+        if self.openai_analyzer:
+            return self.openai_analyzer.analyze_poem_with_ai(poem)
+        else:
+            raise ValueError("OpenAI analyzer not available")
     
     def _analyze_with_keywords(self, poem: Dict) -> Dict:
         """

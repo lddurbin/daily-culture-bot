@@ -14,24 +14,45 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 import re
 
-# Import poem_analyzer for scoring system
+# Import configuration data
 try:
-    from . import poem_analyzer
-    POEM_ANALYZER_AVAILABLE = True
+    from . import wikidata_config
 except ImportError:
     # Fallback for when running as standalone module
     try:
-        import poem_analyzer
-        POEM_ANALYZER_AVAILABLE = True
+        import wikidata_config
     except ImportError:
-        POEM_ANALYZER_AVAILABLE = False
+        wikidata_config = None
+
+# Import extracted modules
+try:
+    from . import wikidata_queries
+    from . import artwork_processor
+except ImportError:
+    # Fallback for when running as standalone module
+    try:
+        import wikidata_queries
+        import artwork_processor
+    except ImportError:
+        wikidata_queries = None
+        artwork_processor = None
 
 
 class PaintingDataCreator:
     def __init__(self, query_timeout: int = 60):
-        self.wikidata_endpoint = "https://query.wikidata.org/sparql"
-        self.wikipedia_api = "https://en.wikipedia.org/api/rest_v1/page/summary/"
-        self.commons_api = "https://commons.wikimedia.org/w/api.php"
+        # Import configuration from separate module
+        if wikidata_config:
+            self.wikidata_endpoint = wikidata_config.WIKIDATA_ENDPOINT
+            self.wikipedia_api = wikidata_config.WIKIPEDIA_API
+            self.commons_api = wikidata_config.COMMONS_API
+            self.style_mappings = wikidata_config.STYLE_MAPPINGS
+        else:
+            # Fallback if module not available
+            self.wikidata_endpoint = "https://query.wikidata.org/sparql"
+            self.wikipedia_api = "https://en.wikipedia.org/api/rest_v1/page/summary/"
+            self.commons_api = "https://commons.wikimedia.org/w/api.php"
+            self.style_mappings = {}
+            print("⚠️ Warning: wikidata_config module not available, using fallback configuration")
         
         # Create a session for connection pooling
         self.session = requests.Session()
@@ -44,26 +65,23 @@ class PaintingDataCreator:
         self.cache_max_size = 50  # Limit cache size
         self.query_timeout = query_timeout  # Configurable timeout
         
-        # Style mappings for better categorization
-        self.style_mappings = {
-            "Q4692": "Renaissance",
-            "Q20826540": "Early Renaissance", 
-            "Q131808": "High Renaissance",
-            "Q37853": "Baroque",
-            "Q40415": "Neoclassicism",
-            "Q7547": "Romanticism",
-            "Q40834": "Realism", 
-            "Q40857": "Impressionism",
-            "Q42489": "Post-Impressionism",
-            "Q9415": "Modernism",
-            "Q34636": "Expressionism",
-            "Q39428": "Surrealism",
-            "Q5090": "Cubism",
-            "Q186030": "Abstract Expressionism",
-            "Q5415": "Pop art",
-            "Q2458": "Fauvism",
-            "Q12124693": "Regionalism"
-        }
+        # Initialize extracted modules
+        if wikidata_queries:
+            self.queries = wikidata_queries.WikidataQueries(
+                self.wikidata_endpoint, self.session, self.query_timeout, 
+                self.query_cache, self.cache_max_size
+            )
+        else:
+            self.queries = None
+            print("⚠️ Warning: wikidata_queries module not available")
+        
+        if artwork_processor:
+            self.processor = artwork_processor.ArtworkProcessor(
+                self.wikidata_endpoint, self.session, self.wikipedia_api
+            )
+        else:
+            self.processor = None
+            print("⚠️ Warning: artwork_processor module not available")
 
     def _get_cache_key(self, query_type: str, **params) -> str:
         """Generate a cache key for query parameters."""
@@ -102,85 +120,12 @@ class PaintingDataCreator:
         Returns:
             List of raw Wikidata results
         """
-        if not q_codes:
+        """Delegate to wikidata_queries module."""
+        if self.queries:
+            return self.queries.query_artwork_by_subject(q_codes, limit, offset, random_order, genres, max_sitelinks, artwork_types)
+        else:
+            print("❌ Wikidata queries module not available")
             return []
-        
-        # Check cache first
-        cache_key = self._get_cache_key("artwork_by_subject", 
-                                      q_codes=q_codes, limit=limit, offset=offset, 
-                                      max_sitelinks=max_sitelinks, artwork_types=artwork_types)
-        
-        if cache_key in self.query_cache:
-            print("📋 Using cached query result")
-            return self.query_cache[cache_key]
-        
-        # Limit Q-codes to prevent overly complex queries
-        if len(q_codes) > 10:
-            print(f"⚠️ Too many Q-codes ({len(q_codes)}), limiting to first 10 for performance")
-            q_codes = q_codes[:10]
-        
-        # Default artwork types if not specified
-        if artwork_types is None:
-            artwork_types = [
-                "Q3305213",  # painting
-                "Q125191",   # photograph
-                "Q860861",   # sculpture
-            ]  # Reduced to most common types for better performance
-        
-        # Create simplified Q-code filter clause
-        q_code_list = ', '.join([f'wd:{q_code}' for q_code in q_codes])
-        artwork_type_list = ', '.join([f'wd:{art_type}' for art_type in artwork_types])
-        
-        # Simplified query structure for better performance
-        sparql_query = f"""
-        SELECT ?artwork ?image ?sitelinks WHERE {{
-          ?artwork wdt:P31 ?artworkType .
-          FILTER(?artworkType IN ({artwork_type_list}))
-          
-          ?artwork wdt:P18 ?image .
-          ?artwork wikibase:sitelinks ?sitelinks .
-          FILTER(?sitelinks < {max_sitelinks})
-          
-          # Match by subject/depicts properties (simplified)
-          ?artwork wdt:P180 ?subject .
-          FILTER(?subject IN ({q_code_list}))
-        }}
-        ORDER BY RAND()
-        LIMIT {limit}
-        OFFSET {offset}
-        """
-        
-        # Use longer timeout for complex queries
-        timeout = self.query_timeout if len(q_codes) > 5 else min(30, self.query_timeout)
-        max_retries = 2  # Reduced retries for faster fallback
-        
-        for attempt in range(max_retries):
-            try:
-                response = self.session.get(
-                    self.wikidata_endpoint,
-                    params={'query': sparql_query, 'format': 'json'},
-                    timeout=timeout
-                )
-                response.raise_for_status()
-                
-                data = response.json()
-                results = data['results']['bindings']
-                
-                # Cache the results
-                self.query_cache[cache_key] = results
-                self._manage_cache_size()
-                
-                return results
-                
-            except requests.RequestException as e:
-                if attempt < max_retries - 1:
-                    delay = 2 ** attempt  # Exponential backoff
-                    print(f"⚠️ Wikidata query attempt {attempt + 1} failed: {e}")
-                    print(f"🔄 Retrying in {delay} seconds...")
-                    time.sleep(delay)
-                else:
-                    print(f"❌ Error querying Wikidata for subjects after {max_retries} attempts: {e}")
-                    return []
 
     def query_wikidata_paintings(self, limit: int = 50, offset: int = 0, filter_type: str = "both", random_order: bool = False, max_sitelinks: int = 20) -> List[Dict]:
         """
@@ -194,63 +139,12 @@ class PaintingDataCreator:
             random_order: Whether to randomize the order of results
             max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
         """
-        
-        # Check cache first
-        cache_key = self._get_cache_key("wikidata_paintings", 
-                                      limit=limit, offset=offset, 
-                                      max_sitelinks=max_sitelinks)
-        
-        if cache_key in self.query_cache:
-            print("📋 Using cached painting query result")
-            return self.query_cache[cache_key]
-        
-        # Simplified query structure for better performance
-        # Remove complex license filtering that causes timeouts
-        sparql_query = f"""
-        SELECT ?painting ?image ?sitelinks WHERE {{
-          ?painting wdt:P31 wd:Q3305213 .  # Instance of painting
-          ?painting wdt:P18 ?image .        # Image
-          ?painting wikibase:sitelinks ?sitelinks .  # Wikipedia sitelinks count
-          
-          # Filter out paintings with excessive Wikipedia coverage (fame filter)
-          FILTER(?sitelinks < {max_sitelinks})
-        }}
-        ORDER BY RAND()
-        LIMIT {limit}
-        OFFSET {offset}
-        """
-        
-        # Use longer timeout for better reliability
-        timeout = self.query_timeout
-        max_retries = 2  # Reduced retries for faster fallback
-        
-        for attempt in range(max_retries):
-            try:
-                response = self.session.get(
-                    self.wikidata_endpoint,
-                    params={'query': sparql_query, 'format': 'json'},
-                    timeout=timeout
-                )
-                response.raise_for_status()
-                
-                data = response.json()
-                results = data['results']['bindings']
-                
-                # Cache the results
-                self.query_cache[cache_key] = results
-                self._manage_cache_size()
-                
-                return results
-                
-            except requests.RequestException as e:
-                if attempt < max_retries - 1:
-                    delay = 2 ** attempt  # Exponential backoff
-                    print(f"⚠️ Wikidata query attempt {attempt + 1} failed: {e}")
-                    print(f"🔄 Retrying in {delay} seconds...")
-                    time.sleep(delay)
-                else:
-                    print(f"❌ Error querying Wikidata after {max_retries} attempts: {e}")
-                    return []
+        """Delegate to wikidata_queries module."""
+        if self.queries:
+            return self.queries.query_wikidata_paintings(limit, offset, filter_type, random_order, max_sitelinks)
+        else:
+            print("❌ Wikidata queries module not available")
+            return []
 
     def get_wikipedia_summary(self, title: str) -> Optional[str]:
         """
@@ -435,6 +329,15 @@ class PaintingDataCreator:
         """
         Process raw Wikidata results into the format used by the daily painting bot.
         """
+        if self.processor and self.queries:
+            return self.processor.process_painting_data(raw_data, self.queries)
+        else:
+            # Fallback to inline processing if modules not available
+            print("⚠️ Using fallback processing - modules not available")
+            return self._process_painting_data_fallback(raw_data)
+    
+    def _process_painting_data_fallback(self, raw_data: List[Dict]) -> List[Dict]:
+        """Fallback processing method when modules are not available."""
         processed_paintings = []
         
         for item in raw_data:
@@ -459,31 +362,17 @@ class PaintingDataCreator:
                 if image_url:
                     image_url = self.get_high_res_image_url(image_url)
                 
-                # Fetch inception date from Wikidata
-                try:
-                    year = self.get_artwork_inception_date(wikidata_url)
-                except Exception as e:
-                    print(f"Error fetching inception date for {title}: {e}")
-                    year = None
-                style = "Classical"
-                museum = "Unknown Location"
-                origin = "Unknown"
-                medium = "Oil on canvas"
-                dimensions = "Unknown dimensions"
-                
-                # Skip fun facts - not needed
-                
                 # Create the painting entry
                 painting_entry = {
                     "title": self.clean_text(title),
                     "artist": self.clean_text(artist),
                     "image": image_url,
-                    "year": year,
-                    "style": self.clean_text(style),
-                    "museum": self.clean_text(museum),
-                    "origin": self.clean_text(origin),
-                    "medium": self.clean_text(medium),
-                    "dimensions": self.clean_text(dimensions),
+                    "year": None,
+                    "style": "Classical",
+                    "museum": "Unknown Location",
+                    "origin": "Unknown",
+                    "medium": "Oil on canvas",
+                    "dimensions": "Unknown dimensions",
                     "wikidata": wikidata_url,
                     "date": datetime.now().strftime("%Y-%m-%d")
                 }
@@ -491,88 +380,110 @@ class PaintingDataCreator:
                 processed_paintings.append(painting_entry)
                 print(f"Processed: {title} by {artist}")
                 
-                # Add a longer delay to be respectful to the APIs
-                time.sleep(2)
-                
             except Exception as e:
                 print(f"Error processing painting data: {e}")
                 continue
         
         return processed_paintings
+    
+    def _get_painting_labels_fallback(self, wikidata_url: str) -> Dict[str, str]:
+        """Fallback method to get painting labels."""
+        if not wikidata_url:
+            return {"title": "Unknown Title", "artist": "Unknown Artist"}
+        
+        try:
+            # Extract Q-ID from URL
+            q_id = wikidata_url.split('/')[-1]
+            
+            # Simple query to get labels
+            sparql_query = f"""
+            SELECT ?paintingLabel ?artistLabel WHERE {{
+              wd:{q_id} rdfs:label ?paintingLabel .
+              wd:{q_id} wdt:P170 ?artist .
+              ?artist rdfs:label ?artistLabel .
+              FILTER(LANG(?paintingLabel) = "en")
+              FILTER(LANG(?artistLabel) = "en")
+            }}
+            LIMIT 1
+            """
+            
+            response = self.session.get(
+                self.wikidata_endpoint,
+                params={'query': sparql_query, 'format': 'json'},
+                timeout=15
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                results = data['results']['bindings']
+                if results:
+                    return {
+                        "title": results[0].get('paintingLabel', {}).get('value', 'Unknown Title'),
+                        "artist": results[0].get('artistLabel', {}).get('value', 'Unknown Artist')
+                    }
+        except Exception as e:
+            print(f"Error getting labels: {e}")
+        
+        return {"title": "Unknown Title", "artist": "Unknown Artist"}
+    
+    def _get_high_res_image_url_fallback(self, commons_url: str) -> str:
+        """Fallback method to get high-res image URL."""
+        if not commons_url:
+            return ""
+            
+        # If it's already a thumbnail URL, try to get the original
+        if "/thumb/" in commons_url:
+            # Extract the original filename from thumbnail URL
+            original_match = re.search(r'/thumb/([^/]+/[^/]+\.(jpg|jpeg|png|gif))', commons_url)
+            if original_match:
+                original_path = original_match.group(1)
+                return f"https://upload.wikimedia.org/wikipedia/commons/{original_path}"
+            else:
+                return commons_url
+        
+        # If it's a direct commons URL, return as-is
+        if "commons.wikimedia.org" in commons_url or "upload.wikimedia.org" in commons_url:
+            return commons_url
+            
+        return commons_url
+    
+    def _clean_text_fallback(self, text: str) -> str:
+        """Fallback method to clean text."""
+        if not text:
+            return ""
+        return text.strip().replace('\n', ' ').replace('\r', ' ')
+    
+    def get_painting_labels(self, wikidata_url: str) -> Dict[str, str]:
+        """Get labels for a painting from its Wikidata URL."""
+        if self.processor:
+            return self.processor.get_painting_labels(wikidata_url)
+        else:
+            return self._get_painting_labels_fallback(wikidata_url)
+    
+    def get_high_res_image_url(self, commons_url: str) -> str:
+        """Convert Wikimedia Commons image URL to a higher resolution version."""
+        if self.processor:
+            return self.processor.get_high_res_image_url(commons_url)
+        else:
+            return self._get_high_res_image_url_fallback(commons_url)
+    
+    def clean_text(self, text: str) -> str:
+        """Clean text from Wikidata responses."""
+        if self.processor:
+            return self.processor.clean_text(text)
+        else:
+            return self._clean_text_fallback(text)
 
     def create_sample_paintings(self, count: int = 5) -> List[Dict]:
         """
         Create sample paintings for testing when Wikidata is not accessible.
         """
-        sample_paintings = [
-            {
-                "title": "The Great Wave off Kanagawa",
-                "artist": "Katsushika Hokusai",
-                "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/The_Great_Wave_off_Kanagawa.jpg/800px-The_Great_Wave_off_Kanagawa.jpg",
-                "year": 1831,
-                "style": "Ukiyo-e",
-                "museum": "Metropolitan Museum of Art, New York",
-                "origin": "Japan",
-                "medium": "Polychrome woodblock print",
-                "dimensions": "25.7 cm × 37.9 cm",
-                "wikidata": "https://www.wikidata.org/wiki/Q455354",
-                "date": datetime.now().strftime("%Y-%m-%d")
-            },
-            {
-                "title": "The Kiss",
-                "artist": "Gustav Klimt",
-                "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/The_Kiss_-_Gustav_Klimt_-_Google_Cultural_Institute.jpg/800px-The_Kiss_-_Gustav_Klimt_-_Google_Cultural_Institute.jpg",
-                "year": 1908,
-                "style": "Art Nouveau",
-                "museum": "Österreichische Galerie Belvedere, Vienna",
-                "origin": "Austria",
-                "medium": "Oil and gold leaf on canvas",
-                "dimensions": "180 cm × 180 cm",
-                "wikidata": "https://www.wikidata.org/wiki/Q203533",
-                "date": datetime.now().strftime("%Y-%m-%d")
-            },
-            {
-                "title": "A Sunday Afternoon on the Island of La Grande Jatte",
-                "artist": "Georges Seurat",
-                "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg/800px-A_Sunday_on_La_Grande_Jatte%2C_Georges_Seurat%2C_1884.jpg",
-                "year": 1886,
-                "style": "Pointillism",
-                "museum": "Art Institute of Chicago",
-                "origin": "France",
-                "medium": "Oil on canvas",
-                "dimensions": "207.5 cm × 308.1 cm",
-                "wikidata": "https://www.wikidata.org/wiki/Q214316",
-                "date": datetime.now().strftime("%Y-%m-%d")
-            },
-            {
-                "title": "Las Meninas",
-                "artist": "Diego Velázquez",
-                "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Las_Meninas%2C_by_Diego_Vel%C3%A1zquez%2C_from_Prado_in_Google_Earth.jpg/800px-Las_Meninas%2C_by_Diego_Vel%C3%A1zquez%2C_from_Prado_in_Google_Earth.jpg",
-                "year": 1656,
-                "style": "Baroque",
-                "museum": "Museo del Prado, Madrid",
-                "origin": "Spain",
-                "medium": "Oil on canvas",
-                "dimensions": "318 cm × 276 cm",
-                "wikidata": "https://www.wikidata.org/wiki/Q125110",
-                "date": datetime.now().strftime("%Y-%m-%d")
-            },
-            {
-                "title": "Water Lilies",
-                "artist": "Claude Monet",
-                "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Claude_Monet_-_Water_Lilies_-_1919%2C_Mus%C3%A9e_Marmottan_Monet%2C_Paris.jpg/800px-Claude_Monet_-_Water_Lilies_-_1919%2C_Mus%C3%A9e_Marmottan_Monet%2C_Paris.jpg",
-                "year": 1919,
-                "style": "Impressionism",
-                "museum": "Musée de l'Orangerie, Paris",
-                "origin": "France",
-                "medium": "Oil on canvas",
-                "dimensions": "200 cm × 425 cm",
-                "wikidata": "https://www.wikidata.org/wiki/Q3012020",
-                "date": datetime.now().strftime("%Y-%m-%d")
-            }
-        ]
-        
-        return sample_paintings[:count]
+        """Delegate to artwork_processor module."""
+        if self.processor:
+            return self.processor.create_sample_paintings(count)
+        else:
+            print("❌ Artwork processor module not available")
+            return []
 
     def fetch_paintings(self, count: int = 1, filter_type: str = "both", random_order: bool = True, 
                        use_sample_on_error: bool = True, max_sitelinks: int = 20) -> List[Dict]:
@@ -902,17 +813,21 @@ class PaintingDataCreator:
     
     def _get_medium_from_type(self, artwork_type: str) -> str:
         """Get appropriate medium description from artwork type Q-code."""
-        medium_mapping = {
-            "Q3305213": "Oil on canvas",  # painting
-            "Q125191": "Photograph",       # photograph
-            "Q860861": "Marble sculpture", # sculpture
-            "Q42973": "Pencil on paper",   # drawing
-            "Q93184": "Print",            # print
-            "Q11661": "Mural",            # mural
-            "Q11060274": "Digital art",    # digital art
-            "Q1044167": "Illustration"    # illustration
-        }
-        return medium_mapping.get(artwork_type, "Mixed media")
+        if wikidata_config:
+            return wikidata_config.MEDIUM_MAPPINGS.get(artwork_type, "Mixed media")
+        else:
+            # Fallback mapping
+            medium_mapping = {
+                "Q3305213": "Oil on canvas",  # painting
+                "Q125191": "Photograph",       # photograph
+                "Q860861": "Marble sculpture", # sculpture
+                "Q42973": "Pencil on paper",   # drawing
+                "Q93184": "Print",            # print
+                "Q11661": "Mural",            # mural
+                "Q11060274": "Digital art",    # digital art
+                "Q1044167": "Illustration"    # illustration
+            }
+            return medium_mapping.get(artwork_type, "Mixed media")
 
     def get_daily_painting(self, max_sitelinks: int = 20) -> Dict:
         """
