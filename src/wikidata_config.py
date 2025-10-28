@@ -60,7 +60,7 @@ VISION_MODEL = "gpt-4o"
 
 # Multi-pass analysis settings
 CANDIDATE_COUNT_MULTIPLIER = 3  # Fetch 3x more candidates than needed
-MIN_CANDIDATE_COUNT = 20  # Minimum number of candidates to fetch
+MIN_CANDIDATE_COUNT = 6  # Minimum number of candidates to fetch
 CANDIDATE_SCORE_THRESHOLD_MULTIPLIER = 0.7  # Lower threshold for candidates
 
 # Specificity bonus weights

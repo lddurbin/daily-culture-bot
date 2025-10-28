@@ -13,6 +13,8 @@ import random
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 import re
+import concurrent.futures
+from threading import Lock
 
 # Import configuration data
 try:
@@ -76,6 +78,9 @@ class PaintingDataCreator:
         self.query_cache = {}
         self.cache_max_size = 50  # Limit cache size
         self.query_timeout = query_timeout  # Configurable timeout
+        
+        # Thread lock for thread-safe operations
+        self.cache_lock = Lock()
         
         # Initialize extracted modules
         if wikidata_queries:
@@ -773,8 +778,8 @@ class PaintingDataCreator:
                     print(f"⚠️ No results with {strategy['name']}, trying next strategy...")
                     continue
                 
-                # Process and score each artwork using extracted method
-                scored_artwork = self._score_and_filter_artwork(
+                # Process and score each artwork using parallel processing
+                scored_artwork = self._score_and_filter_artwork_parallel(
                     raw_data, strategy, poem_analysis, genres, (poet_birth_year, poet_death_year), analyzer, enable_vision_analysis
                 )
                 
@@ -793,6 +798,86 @@ class PaintingDataCreator:
         random_artwork = self.fetch_paintings(count=count, max_sitelinks=max_sitelinks)
         return [(art, 0.3) for art in random_artwork]  # Give low score for random
     
+    def _score_and_filter_artwork_parallel(self, raw_data: List[Dict], strategy: Dict, poem_analysis: Dict, 
+                                          genres: List[str], poet_years: Tuple[Optional[int], Optional[int]], 
+                                          analyzer, enable_vision_analysis: bool = False, max_workers: int = 4) -> List[Tuple[Dict, float]]:
+        """
+        Process and score artwork from raw data using parallel processing.
+        
+        Args:
+            raw_data: List of raw Wikidata query results
+            strategy: Strategy dict with min_score and other parameters
+            poem_analysis: Poem analysis results for scoring
+            genres: List of genre Q-codes to filter by
+            poet_years: Tuple of (poet_birth_year, poet_death_year)
+            analyzer: PoemAnalyzer instance for scoring
+            enable_vision_analysis: Whether to enable vision analysis
+            max_workers: Maximum number of parallel workers
+            
+        Returns:
+            List of tuples (artwork_entry, score) sorted by score descending
+        """
+        scored_artwork = []
+        
+        def process_single_artwork(item):
+            """Process a single artwork item."""
+            try:
+                # Extract fields from raw data
+                fields = self._extract_artwork_fields_from_raw(item)
+                if not fields:
+                    return None
+                
+                # Build artwork entry from fields
+                artwork_entry = self._build_artwork_entry_from_fields(fields, fields['wikidata_url'], enable_vision_analysis=enable_vision_analysis)
+                if not artwork_entry:
+                    return None
+                
+                # Score the artwork using the analyzer with era information
+                poet_birth_year, poet_death_year = poet_years
+                score = analyzer.score_artwork_match(
+                    poem_analysis, 
+                    artwork_entry["subject_q_codes"], 
+                    artwork_entry["genre_q_codes"],
+                    artwork_year=artwork_entry.get('year'),
+                    poet_birth_year=poet_birth_year,
+                    poet_death_year=poet_death_year
+                )
+                
+                # Apply depicts bonus for direct depicts matches
+                depicts_bonus = strategy.get("depicts_bonus", 0.0)
+                if depicts_bonus > 0:
+                    score += depicts_bonus
+                    score = min(score, 1.0)  # Cap at 1.0
+                
+                # Only return artwork that meets minimum score
+                if score >= strategy["min_score"]:
+                    bonus_text = f" (+{depicts_bonus:.1f} depicts bonus)" if depicts_bonus > 0 else ""
+                    print(f"Scored: {artwork_entry['title']} by {artwork_entry['artist']} (score: {score:.2f}{bonus_text})")
+                    return (artwork_entry, score)
+                
+                return None
+                
+            except Exception as e:
+                print(f"Error processing artwork data: {e}")
+                return None
+        
+        # Process artwork in parallel
+        print(f"🔄 Processing {len(raw_data)} artworks in parallel (max {max_workers} workers)...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_item = {executor.submit(process_single_artwork, item): item for item in raw_data}
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_item):
+                result = future.result()
+                if result is not None:
+                    scored_artwork.append(result)
+        
+        # Sort by score descending
+        scored_artwork.sort(reverse=True, key=lambda x: x[1])
+        
+        return scored_artwork
+
     def _score_and_filter_artwork(self, raw_data: List[Dict], strategy: Dict, poem_analysis: Dict, 
                                  genres: List[str], poet_years: Tuple[Optional[int], Optional[int]], 
                                  analyzer, enable_vision_analysis: bool = False) -> List[Tuple[Dict, float]]:
@@ -922,24 +1007,40 @@ class PaintingDataCreator:
         # Get artwork inception date (year)
         artwork_year = self.get_artwork_inception_date(wikidata_url)
         
+        # Build preliminary artwork entry to check metadata quality
+        preliminary_entry = {
+            'title': title,
+            'artist': artist,
+            'subject_q_codes': fields.get('subject_q_codes', []),
+            'genre_q_codes': fields.get('genre_q_codes', []),
+            'depicts': fields.get('depicts', []),
+            'style': fields.get('style', ''),
+            'medium': medium,
+            'year': artwork_year
+        }
+        
         # Perform vision analysis if enabled and vision analyzer is available
         vision_analysis = None
         vision_q_codes = []
         if enable_vision_analysis and self.vision_analyzer and self.vision_analyzer.is_enabled() and image_url:
-            try:
-                print(f"🔍 Analyzing artwork image: {title}")
-                vision_analysis = self.vision_analyzer.analyze_artwork_image(image_url, title)
-                
-                if vision_analysis.get("success"):
-                    # Extract Q-codes from vision analysis
-                    vision_q_codes = self.vision_analyzer.extract_q_codes_from_vision_analysis(vision_analysis)
-                    print(f"🎨 Vision analysis completed for {title}: {len(vision_q_codes)} Q-codes extracted")
-                else:
-                    print(f"⚠️ Vision analysis failed for {title}: {vision_analysis.get('error', 'Unknown error')}")
+            # Check if we should skip vision analysis due to good metadata
+            if self.vision_analyzer.should_skip_vision_analysis(preliminary_entry):
+                print(f"⏭️ Skipping vision analysis for {title} (good metadata available)")
+            else:
+                try:
+                    print(f"🔍 Analyzing artwork image: {title}")
+                    vision_analysis = self.vision_analyzer.analyze_artwork_image(image_url, title)
                     
-            except Exception as e:
-                print(f"❌ Error during vision analysis for {title}: {e}")
-                vision_analysis = None
+                    if vision_analysis.get("success"):
+                        # Extract Q-codes from vision analysis
+                        vision_q_codes = self.vision_analyzer.extract_q_codes_from_vision_analysis(vision_analysis)
+                        print(f"🎨 Vision analysis completed for {title}: {len(vision_q_codes)} Q-codes extracted")
+                    else:
+                        print(f"⚠️ Vision analysis failed for {title}: {vision_analysis.get('error', 'Unknown error')}")
+                        
+                except Exception as e:
+                    print(f"❌ Error during vision analysis for {title}: {e}")
+                    vision_analysis = None
         
         # Create artwork entry
         artwork_entry = {

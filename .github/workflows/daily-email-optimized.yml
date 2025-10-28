@@ -1,4 +1,4 @@
-name: Daily Culture Email
+name: Daily Culture Email (Optimized)
 
 on:
   schedule:
@@ -19,12 +19,28 @@ jobs:
         with:
           python-version: '3.11'
           
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+            
+      - name: Cache vision analysis results
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/daily-culture-bot/vision-analysis
+          key: ${{ runner.os }}-vision-cache-${{ hashFiles('**/src/vision_analyzer.py') }}
+          restore-keys: |
+            ${{ runner.os }}-vision-cache-
+            
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      - name: Send daily culture email
+      - name: Send daily culture email (optimized)
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -41,4 +57,5 @@ jobs:
             --max-fame-level 20 \
             --min-match-score 0.3 \
             --candidate-count 6 \
-            --no-vision
+            --no-vision \
+            --query-timeout 30
