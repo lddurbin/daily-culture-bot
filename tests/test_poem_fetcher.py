@@ -841,6 +841,8 @@ class TestPoemFetcherCoverage:
         # Skip this test as it makes real API calls which can be slow
         pytest.skip("Skipping - makes real API calls")
     
+    @pytest.mark.slow
+    @pytest.mark.api
     def test_malformed_poem_data(self):
         """Test handling of malformed poem data."""
         with patch('requests.get') as mock_get:

@@ -2228,6 +2228,8 @@ class TestDataCreatorCoverage:
         # Skip cache test as methods may not exist
         pytest.skip("Cache methods may not be available")
     
+    @pytest.mark.slow
+    @pytest.mark.api
     def test_fallback_strategies(self):
         """Test fallback strategies when APIs are unavailable."""
         # Test with mocked API failures
@@ -2242,6 +2244,8 @@ class TestDataCreatorCoverage:
                 # Expected to fail gracefully
                 pass
     
+    @pytest.mark.slow
+    @pytest.mark.api
     def test_timeout_handling(self):
         """Test timeout handling."""
         # Test with timeout simulation
@@ -2323,6 +2327,8 @@ class TestDataCreatorCoverage:
         # Skip threading test to avoid timeout issues
         pytest.skip("Skipping threading test to avoid timeout")
     
+    @pytest.mark.slow
+    @pytest.mark.api
     def test_error_recovery_mechanisms(self):
         """Test error recovery mechanisms."""
         # Test with various error conditions
