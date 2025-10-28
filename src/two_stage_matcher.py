@@ -228,12 +228,25 @@ class TwoStageMatcher:
         # For now, return a basic score based on theme presence
         theme_score = 0.0
         for theme in poem_themes:
+            # Handle nested lists in themes
+            if isinstance(theme, list):
+                # Flatten nested lists
+                flat_theme = [item for item in theme if isinstance(item, str)]
+                theme = " ".join(flat_theme).lower() if flat_theme else ""
+            elif isinstance(theme, str):
+                theme = theme.lower()
+            else:
+                continue
+            
+            if not theme:
+                continue
+                
             # Simple theme matching - would be enhanced with proper mappings
-            if theme.lower() in ["nature", "landscape"] and "Q191163" in artwork_q_codes:
+            if theme in ["nature", "landscape"] and "Q191163" in artwork_q_codes:
                 theme_score += 0.3
-            elif theme.lower() in ["night", "darkness"] and "Q183" in artwork_q_codes:
+            elif theme in ["night", "darkness"] and "Q183" in artwork_q_codes:
                 theme_score += 0.3
-            elif theme.lower() in ["water", "ocean"] and "Q16970" in artwork_q_codes:
+            elif theme in ["water", "ocean"] and "Q16970" in artwork_q_codes:
                 theme_score += 0.3
         
         return min(theme_score, 1.0)
@@ -496,8 +509,16 @@ class TwoStageMatcher:
         
         q_codes = []
         for emotion in emotions:
-            if emotion.lower() in emotion_mappings:
-                q_codes.extend(emotion_mappings[emotion.lower()])
+            # Handle nested lists in emotions
+            if isinstance(emotion, list):
+                # Flatten nested lists
+                flat_emotion = [item for item in emotion if isinstance(item, str)]
+                for item in flat_emotion:
+                    if item.lower() in emotion_mappings:
+                        q_codes.extend(emotion_mappings[item.lower()])
+            elif isinstance(emotion, str):
+                if emotion.lower() in emotion_mappings:
+                    q_codes.extend(emotion_mappings[emotion.lower()])
         
         return list(set(q_codes))
 

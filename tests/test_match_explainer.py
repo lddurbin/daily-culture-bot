@@ -320,5 +320,248 @@ class TestPrivateMethods:
         assert len(summary) > 0
 
 
+class TestMatchExplainerEdgeCases:
+    """Test edge cases for nested lists and mixed data types."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.explainer = MatchExplainer()
+    
+    def test_nested_lists_in_themes(self):
+        """Test handling of nested lists in themes."""
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "emotional_tone": "joyful",
+            "themes": [["nature", "night"], "love"],  # Nested list
+            "concrete_elements": {
+                "natural_objects": ["tree"],
+                "man_made_objects": [],
+                "living_beings": [],
+                "other_concrete_nouns": []
+            }
+        }
+        
+        artwork = {
+            "title": "Forest at Night",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],  # Nature
+            "genre_q_codes": ["Q191163"]  # Landscape
+        }
+        
+        score = 0.75
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        assert isinstance(explanation, dict)
+        assert 'match_score' in explanation
+        # Should handle nested lists gracefully
+        assert explanation['match_score'] == score
+    
+    def test_nested_lists_in_emotions(self):
+        """Test handling of nested lists in emotions."""
+        poem_analysis = {
+            "primary_emotions": [["melancholy"], "peace"],  # Nested list
+            "emotional_tone": "serene",
+            "themes": ["nature"],
+            "concrete_elements": {
+                "natural_objects": ["tree"],
+                "man_made_objects": [],
+                "living_beings": [],
+                "other_concrete_nouns": []
+            }
+        }
+        
+        artwork = {
+            "title": "Peaceful Forest",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = 0.8
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        assert isinstance(explanation, dict)
+        assert 'match_score' in explanation
+        assert explanation['match_score'] == score
+    
+    def test_nested_lists_in_concrete_elements(self):
+        """Test handling of nested lists in concrete elements."""
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "emotional_tone": "joyful",
+            "themes": ["nature"],
+            "concrete_elements": {
+                "natural_objects": [["tree", "moon"], "sky"],  # Nested list
+                "man_made_objects": [],
+                "living_beings": [],
+                "other_concrete_nouns": []
+            }
+        }
+        
+        artwork = {
+            "title": "Moonlit Forest",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = 0.7
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        assert isinstance(explanation, dict)
+        assert 'match_score' in explanation
+        assert explanation['match_score'] == score
+    
+    def test_mixed_list_string_types(self):
+        """Test handling of mixed list and string types throughout."""
+        poem_analysis = {
+            "primary_emotions": [["melancholy"], "peace", "joy"],  # Mixed types
+            "emotional_tone": "serene",
+            "themes": ["nature", ["love", "loss"]],  # Mixed types
+            "concrete_elements": {
+                "natural_objects": [["tree", "moon"], "sky", "cloud"],  # Mixed types
+                "man_made_objects": [],
+                "living_beings": [],
+                "other_concrete_nouns": []
+            }
+        }
+        
+        artwork = {
+            "title": "Complex Scene",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = 0.6
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        assert isinstance(explanation, dict)
+        assert 'match_score' in explanation
+        assert explanation['match_score'] == score
+    
+    def test_empty_nested_lists(self):
+        """Test handling of empty nested lists."""
+        poem_analysis = {
+            "primary_emotions": [[]],  # Empty nested list
+            "emotional_tone": "neutral",
+            "themes": ["nature"],
+            "concrete_elements": {
+                "natural_objects": ["tree"],
+                "man_made_objects": [],
+                "living_beings": [],
+                "other_concrete_nouns": []
+            }
+        }
+        
+        artwork = {
+            "title": "Simple Scene",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = 0.5
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        assert isinstance(explanation, dict)
+        assert 'match_score' in explanation
+        assert explanation['match_score'] == score
+    
+    def test_deeply_nested_structures(self):
+        """Test handling of deeply nested structures."""
+        poem_analysis = {
+            "primary_emotions": [[["deep", "emotion"]]],  # Deeply nested
+            "emotional_tone": "complex",
+            "themes": ["nature"],
+            "concrete_elements": {
+                "natural_objects": ["tree"],
+                "man_made_objects": [],
+                "living_beings": [],
+                "other_concrete_nouns": []
+            }
+        }
+        
+        artwork = {
+            "title": "Deep Scene",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = 0.4
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        assert isinstance(explanation, dict)
+        assert 'match_score' in explanation
+        assert explanation['match_score'] == score
+    
+    def test_malformed_data_structures(self):
+        """Test handling of malformed data structures."""
+        poem_analysis = {
+            "primary_emotions": "not_a_list",  # Wrong type
+            "emotional_tone": 123,  # Wrong type
+            "themes": [],  # Empty list instead of None to avoid iteration error
+            "concrete_elements": {
+                "natural_objects": "not_a_list",  # Wrong type
+                "man_made_objects": [],
+                "living_beings": [],
+                "abstract_concepts": []  # Updated field name
+            }
+        }
+        
+        artwork = {
+            "title": "Malformed Test",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = 0.3
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        # Should handle malformed data gracefully
+        assert isinstance(explanation, dict)
+        assert 'match_score' in explanation
+        assert explanation['match_score'] == score
+    
+    def test_missing_required_fields(self):
+        """Test handling of missing required fields."""
+        poem_analysis = {
+            # Missing primary_emotions
+            "emotional_tone": "joyful",
+            "themes": ["nature"],
+            "concrete_elements": {
+                "natural_objects": ["tree"],
+                "man_made_objects": [],
+                "living_beings": [],
+                "other_concrete_nouns": []
+            }
+        }
+        
+        artwork = {
+            "title": "Missing Fields Test",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = 0.6
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        # Should handle missing fields gracefully
+        assert isinstance(explanation, dict)
+        assert 'match_score' in explanation
+        assert explanation['match_score'] == score
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

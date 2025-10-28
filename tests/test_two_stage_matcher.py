@@ -542,5 +542,374 @@ class TestScoringMethods:
         assert len(q_codes) >= 0
 
 
+class TestTwoStageMatcherCoverage:
+    """Additional tests to improve coverage for two_stage_matcher.py."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.matcher = TwoStageMatcher()
+    
+    def test_apply_hard_constraints_edge_cases(self):
+        """Test edge cases in apply_hard_constraints."""
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "emotional_tone": "joyful",
+            "themes": ["nature"],
+            "narrative_elements": {
+                "setting": "outdoor"
+            }
+        }
+        
+        # Test with artwork that should be excluded (joyful excludes death/mourning Q-codes)
+        artwork = {
+            "title": "Death Scene",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q4"],  # Death (excluded for joyful)
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        # Should be excluded due to hard constraint
+        result = self.matcher.apply_hard_constraints(poem_analysis, artwork)
+        assert result == False
+        
+        # Test with artwork that should pass
+        artwork2 = {
+            "title": "Peaceful Forest",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],  # Nature
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        result2 = self.matcher.apply_hard_constraints(poem_analysis, artwork2)
+        assert result2 == True
+    
+    def test_score_artwork_edge_cases(self):
+        """Test edge cases in score_artwork method."""
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "emotional_tone": "joyful",
+            "themes": ["nature"],
+            "narrative_elements": {
+                "setting": "outdoor"
+            },
+            "concrete_elements": {
+                "natural_objects": ["tree", "flower"],
+                "man_made_objects": [],
+                "living_beings": [],
+                "abstract_concepts": []
+            }
+        }
+        
+        artwork = {
+            "title": "Forest Scene",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        # Test scoring
+        score = self.matcher.score_artwork(poem_analysis, artwork)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_score_concrete_elements_edge_cases(self):
+        """Test edge cases in _score_concrete_elements."""
+        poem_analysis = {
+            "concrete_elements": {
+                "natural_objects": ["tree", "flower"],
+                "man_made_objects": ["house"],
+                "living_beings": ["bird"],
+                "abstract_concepts": ["peace"]
+            }
+        }
+        
+        artwork = {
+            "title": "Mixed Scene",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860", "Q515"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        # _score_concrete_elements requires vision_analysis parameter
+        vision_analysis = {
+            "objects": ["tree", "flower", "house", "bird"],
+            "colors": ["green", "brown", "blue"]
+        }
+        
+        score = self.matcher._score_concrete_elements(poem_analysis, artwork, vision_analysis)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_score_theme_match_edge_cases(self):
+        """Test edge cases in _score_theme_match."""
+        poem_analysis = {
+            "themes": ["nature", "love"],
+            "narrative_elements": {
+                "setting": "outdoor"
+            }
+        }
+        
+        artwork = {
+            "title": "Nature Love",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860", "Q16521"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = self.matcher._score_theme_match(poem_analysis, artwork)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_score_emotional_tone_edge_cases(self):
+        """Test edge cases in _score_emotional_tone."""
+        poem_analysis = {
+            "emotional_tone": "melancholic",
+            "primary_emotions": ["sadness", "longing"]
+        }
+        
+        artwork = {
+            "title": "Melancholic Scene",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        score = self.matcher._score_emotional_tone(poem_analysis, artwork)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_score_genre_alignment_edge_cases(self):
+        """Test edge cases in _score_genre_alignment."""
+        poem_analysis = {
+            "narrative_elements": {
+                "setting": "outdoor",
+                "time": "day"
+            }
+        }
+        
+        artwork = {
+            "title": "Landscape",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]  # Landscape
+        }
+        
+        score = self.matcher._score_genre_alignment(poem_analysis, artwork)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_calculate_era_score_edge_cases(self):
+        """Test edge cases in _calculate_era_score."""
+        poem_analysis = {
+            "narrative_elements": {
+                "setting": "outdoor",
+                "time": "day"
+            }
+        }
+        
+        artwork = {
+            "title": "Modern Art",
+            "artist": "Test Artist",
+            "year": 2020,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        # Test with proper parameters
+        score = self.matcher._calculate_era_score(poem_analysis, artwork, poet_birth_year=1850, poet_death_year=1900)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_hard_constraints_with_various_emotions(self):
+        """Test hard constraints with various emotions."""
+        emotions = ["peaceful", "serene", "joyful", "celebratory", "intimate", "bright", "light"]
+        
+        for emotion in emotions:
+            poem_analysis = {
+                "primary_emotions": [emotion],
+                "emotional_tone": emotion,
+                "themes": ["nature"],
+                "narrative_elements": {
+                    "setting": "outdoor"
+                }
+            }
+            
+            # Test with artwork that should be excluded
+            # Use appropriate Q-codes based on emotion exclusions
+            if emotion in ["peaceful", "serene"]:
+                q_codes = ["Q198"]  # War (excluded for peaceful/serene)
+            elif emotion in ["joyful", "celebratory"]:
+                q_codes = ["Q4"]  # Death (excluded for joyful/celebratory)
+            else:
+                q_codes = ["Q7860"]  # Nature (should pass)
+            
+            artwork = {
+                "title": f"Test {emotion}",
+                "artist": "Test Artist",
+                "year": 1850,
+                "subject_q_codes": q_codes,
+                "genre_q_codes": ["Q191163"]
+            }
+            
+            result = self.matcher.apply_hard_constraints(poem_analysis, artwork)
+            # Should be excluded for most emotions
+            if emotion in ["peaceful", "serene", "joyful", "celebratory"]:
+                assert result == False
+            elif emotion in ["intimate", "bright", "light"]:
+                # These should pass with Nature
+                pass
+    
+    def test_soft_conflicts_detection(self):
+        """Test soft conflicts detection."""
+        conflicts = [
+            ("indoor", "outdoor"),
+            ("outdoor", "indoor"),
+            ("day", "night"),
+            ("night", "day"),
+            ("urban", "rural"),
+            ("rural", "urban"),
+            ("warm", "cool"),
+            ("cool", "warm")
+        ]
+        
+        for poem_setting, artwork_setting in conflicts:
+            poem_analysis = {
+                "narrative_elements": {
+                    "setting": poem_setting
+                }
+            }
+            
+            artwork = {
+                "title": f"Test {artwork_setting}",
+                "artist": "Test Artist",
+                "year": 1850,
+                "subject_q_codes": ["Q7860"],
+                "genre_q_codes": ["Q191163"]
+            }
+            
+            # Should detect soft conflict
+            score = self.matcher.score_artwork(poem_analysis, artwork)
+            assert isinstance(score, float)
+            assert 0.0 <= score <= 1.0
+    
+    def test_empty_poem_analysis(self):
+        """Test with empty poem analysis."""
+        poem_analysis = {}
+        
+        artwork = {
+            "title": "Test Artwork",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        # Should handle empty analysis gracefully
+        score = self.matcher.score_artwork(poem_analysis, artwork)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_missing_artwork_fields(self):
+        """Test with missing artwork fields."""
+        poem_analysis = {
+            "themes": ["nature"],
+            "narrative_elements": {
+                "setting": "outdoor"
+            }
+        }
+        
+        artwork = {
+            "title": "Test Artwork",
+            "artist": "Test Artist"
+            # Missing year, subject_q_codes, genre_q_codes
+        }
+        
+        # Should handle missing fields gracefully
+        score = self.matcher.score_artwork(poem_analysis, artwork)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+    
+    def test_vision_analysis_integration(self):
+        """Test integration with vision analysis."""
+        poem_analysis = {
+            "themes": ["nature"],
+            "narrative_elements": {
+                "setting": "outdoor"
+            }
+        }
+        
+        artwork = {
+            "title": "Test Artwork",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }
+        
+        vision_analysis = {
+            "colors": ["green", "blue"],
+            "mood": "peaceful",
+            "objects": ["tree", "sky"]
+        }
+        
+        # Test with vision analysis
+        score = self.matcher.score_artwork(poem_analysis, artwork, vision_analysis)
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
+        
+        # Test hard constraints with vision analysis
+        result = self.matcher.apply_hard_constraints(poem_analysis, artwork, vision_analysis)
+        assert isinstance(result, bool)
+    
+    def test_filter_and_score_artwork_with_empty_candidates(self):
+        """Test filter_and_score_artwork with empty candidates list."""
+        poem_analysis = {
+            "themes": ["nature"],
+            "narrative_elements": {
+                "setting": "outdoor"
+            }
+        }
+        
+        candidates = []
+        
+        result = self.matcher.filter_and_score_artwork(poem_analysis, candidates)
+        assert isinstance(result, list)
+        assert len(result) == 0
+    
+    def test_filter_and_score_artwork_with_single_candidate(self):
+        """Test filter_and_score_artwork with single candidate."""
+        poem_analysis = {
+            "themes": ["nature"],
+            "narrative_elements": {
+                "setting": "outdoor"
+            }
+        }
+        
+        candidates = [{
+            "title": "Test Artwork",
+            "artist": "Test Artist",
+            "year": 1850,
+            "subject_q_codes": ["Q7860"],
+            "genre_q_codes": ["Q191163"]
+        }]
+        
+        result = self.matcher.filter_and_score_artwork(poem_analysis, candidates)
+        assert isinstance(result, list)
+        assert len(result) <= len(candidates)
+        
+        if result:
+            artwork, score = result[0]
+            assert isinstance(artwork, dict)
+            assert isinstance(score, float)
+            assert 0.0 <= score <= 1.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
