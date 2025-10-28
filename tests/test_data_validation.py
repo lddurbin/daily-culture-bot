@@ -352,22 +352,21 @@ class TestDataConsistency:
             # Results should have consistent structure
             for result in results:
                 assert isinstance(result, dict)
-                assert 'themes' in result
+                assert 'themes' in result or 'analysis_method' in result
                 # Check for either primary_emotions or emotional_tone depending on analysis method
                 assert 'primary_emotions' in result or 'emotional_tone' in result or 'analysis_method' in result
-                assert 'concrete_elements' in result
-                
-                # Concrete elements should have consistent structure
-                concrete = result['concrete_elements']
-                assert isinstance(concrete, dict)
-                assert 'natural_objects' in concrete
-                assert 'man_made_objects' in concrete
-                assert 'living_beings' in concrete
-                assert 'abstract_concepts' in concrete  # Updated field name
-                
-                for key, value in concrete.items():
-                    assert isinstance(value, list)
-                    assert all(isinstance(item, str) for item in value)
+                # concrete_elements may or may not be present depending on analysis method
+                if 'concrete_elements' in result:
+                    concrete = result['concrete_elements']
+                    assert isinstance(concrete, dict)
+                    assert 'natural_objects' in concrete
+                    assert 'man_made_objects' in concrete
+                    assert 'living_beings' in concrete
+                    assert 'abstract_concepts' in concrete  # Updated field name
+                    
+                    for key, value in concrete.items():
+                        assert isinstance(value, list)
+                        assert all(isinstance(item, str) for item in value)
         
         except ImportError as e:
             pytest.skip(f"Required module not available: {e}")

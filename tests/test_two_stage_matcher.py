@@ -560,12 +560,12 @@ class TestTwoStageMatcherCoverage:
             }
         }
         
-        # Test with artwork that should be excluded
+        # Test with artwork that should be excluded (joyful excludes death/mourning Q-codes)
         artwork = {
-            "title": "War Scene",
+            "title": "Death Scene",
             "artist": "Test Artist",
             "year": 1850,
-            "subject_q_codes": ["Q198"],  # War
+            "subject_q_codes": ["Q4"],  # Death (excluded for joyful)
             "genre_q_codes": ["Q191163"]
         }
         
@@ -634,7 +634,13 @@ class TestTwoStageMatcherCoverage:
             "genre_q_codes": ["Q191163"]
         }
         
-        score = self.matcher._score_concrete_elements(poem_analysis, artwork)
+        # _score_concrete_elements requires vision_analysis parameter
+        vision_analysis = {
+            "objects": ["tree", "flower", "house", "bird"],
+            "colors": ["green", "brown", "blue"]
+        }
+        
+        score = self.matcher._score_concrete_elements(poem_analysis, artwork, vision_analysis)
         assert isinstance(score, float)
         assert 0.0 <= score <= 1.0
     
@@ -716,7 +722,8 @@ class TestTwoStageMatcherCoverage:
             "genre_q_codes": ["Q191163"]
         }
         
-        score = self.matcher._calculate_era_score(poem_analysis, artwork, [])
+        # Test with proper parameters
+        score = self.matcher._calculate_era_score(poem_analysis, artwork, poet_birth_year=1850, poet_death_year=1900)
         assert isinstance(score, float)
         assert 0.0 <= score <= 1.0
     
@@ -735,11 +742,19 @@ class TestTwoStageMatcherCoverage:
             }
             
             # Test with artwork that should be excluded
+            # Use appropriate Q-codes based on emotion exclusions
+            if emotion in ["peaceful", "serene"]:
+                q_codes = ["Q198"]  # War (excluded for peaceful/serene)
+            elif emotion in ["joyful", "celebratory"]:
+                q_codes = ["Q4"]  # Death (excluded for joyful/celebratory)
+            else:
+                q_codes = ["Q7860"]  # Nature (should pass)
+            
             artwork = {
                 "title": f"Test {emotion}",
                 "artist": "Test Artist",
                 "year": 1850,
-                "subject_q_codes": ["Q198"],  # War
+                "subject_q_codes": q_codes,
                 "genre_q_codes": ["Q191163"]
             }
             
@@ -747,6 +762,9 @@ class TestTwoStageMatcherCoverage:
             # Should be excluded for most emotions
             if emotion in ["peaceful", "serene", "joyful", "celebratory"]:
                 assert result == False
+            elif emotion in ["intimate", "bright", "light"]:
+                # These should pass with Nature
+                pass
     
     def test_soft_conflicts_detection(self):
         """Test soft conflicts detection."""
