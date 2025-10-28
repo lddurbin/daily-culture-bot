@@ -55,12 +55,35 @@ class TestArgumentParsing:
             args = daily_paintings.parse_arguments()
             assert args.complementary == True
     
-    def test_complementary_with_poems_flag(self):
-        """Test --complementary flag with --poems."""
-        with patch('sys.argv', ['daily_paintings.py', '--complementary', '--poems']):
+    def test_vision_candidates_argument(self):
+        """Test --vision-candidates argument."""
+        with patch('sys.argv', ['daily_paintings.py', '--vision-candidates', '3']):
             args = daily_paintings.parse_arguments()
-            assert args.complementary == True
-            assert args.poems == True
+            assert args.vision_candidates == 3
+    
+    def test_vision_candidates_default(self):
+        """Test --vision-candidates default value."""
+        with patch('sys.argv', ['daily_paintings.py']):
+            args = daily_paintings.parse_arguments()
+            assert args.vision_candidates == 6
+    
+    def test_vision_candidates_zero(self):
+        """Test --vision-candidates with 0 (analyze all)."""
+        with patch('sys.argv', ['daily_paintings.py', '--vision-candidates', '0']):
+            args = daily_paintings.parse_arguments()
+            assert args.vision_candidates == 0
+    
+    def test_explain_matches_flag(self):
+        """Test --explain-matches flag."""
+        with patch('sys.argv', ['daily_paintings.py', '--explain-matches']):
+            args = daily_paintings.parse_arguments()
+            assert args.explain_matches == True
+    
+    def test_explain_matches_default(self):
+        """Test --explain-matches default value."""
+        with patch('sys.argv', ['daily_paintings.py']):
+            args = daily_paintings.parse_arguments()
+            assert args.explain_matches == False
     
     def test_email_argument(self):
         """Test --email argument."""

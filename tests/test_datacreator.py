@@ -2058,5 +2058,137 @@ class TestDepictsFirstStrategy:
             assert score == 1.0  # Capped at 1.0 (0.8 + 0.5 = 1.3, capped to 1.0)
 
 
+class TestSelectiveVisionAnalysis:
+    """Test selective vision analysis functionality."""
+    
+    def test_score_and_filter_artwork_parallel_selective_vision(self):
+        """Test selective vision analysis in parallel processing."""
+        creator = datacreator.PaintingDataCreator()
+        
+        # Mock vision analyzer
+        mock_vision_analyzer = Mock()
+        mock_vision_analyzer.is_enabled.return_value = True
+        mock_vision_analyzer.should_skip_vision_analysis.return_value = False
+        creator.vision_analyzer = mock_vision_analyzer
+        
+        # Mock poem analyzer
+        mock_analyzer = Mock()
+        mock_analyzer.score_artwork_match.return_value = 0.7
+        
+        # Sample raw data
+        raw_data = [
+            {'painting': {'value': 'url1'}, 'image': {'value': 'img1'}},
+            {'painting': {'value': 'url2'}, 'image': {'value': 'img2'}},
+            {'painting': {'value': 'url3'}, 'image': {'value': 'img3'}}
+        ]
+        
+        # Mock _extract_artwork_fields_from_raw
+        with patch.object(creator, '_extract_artwork_fields_from_raw') as mock_extract:
+            mock_extract.return_value = {
+                'title': 'Test Artwork',
+                'artist': 'Test Artist',
+                'wikidata_url': 'http://test.com',
+                'image_url': 'http://test.com/image.jpg'
+            }
+            
+            # Mock _build_artwork_entry_from_fields
+            with patch.object(creator, '_build_artwork_entry_from_fields') as mock_build:
+                mock_build.return_value = {
+                    'title': 'Test Artwork',
+                    'artist': 'Test Artist',
+                    'subject_q_codes': ['Q7860'],
+                    'genre_q_codes': ['Q191163'],
+                    'year': 1850
+                }
+                
+                strategy = {'min_score': 0.5, 'depicts_bonus': 0.0}
+                poem_analysis = {'themes': ['nature']}
+                genres = ['Q191163']
+                poet_years = (1800, 1900)
+                
+                result = creator._score_and_filter_artwork_parallel(
+                    raw_data, strategy, poem_analysis, genres, poet_years, 
+                    mock_analyzer, enable_vision_analysis=True, 
+                    selective_vision=True, vision_candidate_limit=2
+                )
+                
+                # Should process all artworks (first pass) + top candidates (second pass)
+                assert len(result) == 3
+                # First pass: 3 calls, Second pass: 2 candidates * 3 calls each (search loop) + 2 calls (re-process) = 11 total
+                assert mock_extract.call_count >= 5  # At least 5 calls
+                # First pass: 3 calls, Second pass: 2 calls (top candidates) = 5 total
+                assert mock_build.call_count == 5
+    
+    def test_score_and_filter_artwork_parallel_no_vision(self):
+        """Test parallel processing without vision analysis."""
+        creator = datacreator.PaintingDataCreator()
+        
+        # Mock poem analyzer
+        mock_analyzer = Mock()
+        mock_analyzer.score_artwork_match.return_value = 0.7
+        
+        # Sample raw data
+        raw_data = [
+            {'painting': {'value': 'url1'}, 'image': {'value': 'img1'}}
+        ]
+        
+        # Mock _extract_artwork_fields_from_raw
+        with patch.object(creator, '_extract_artwork_fields_from_raw') as mock_extract:
+            mock_extract.return_value = {
+                'title': 'Test Artwork',
+                'artist': 'Test Artist',
+                'wikidata_url': 'http://test.com',
+                'image_url': 'http://test.com/image.jpg'
+            }
+            
+            # Mock _build_artwork_entry_from_fields
+            with patch.object(creator, '_build_artwork_entry_from_fields') as mock_build:
+                mock_build.return_value = {
+                    'title': 'Test Artwork',
+                    'artist': 'Test Artist',
+                    'subject_q_codes': ['Q7860'],
+                    'genre_q_codes': ['Q191163'],
+                    'year': 1850
+                }
+                
+                strategy = {'min_score': 0.5, 'depicts_bonus': 0.0}
+                poem_analysis = {'themes': ['nature']}
+                genres = ['Q191163']
+                poet_years = (1800, 1900)
+                
+                result = creator._score_and_filter_artwork_parallel(
+                    raw_data, strategy, poem_analysis, genres, poet_years, 
+                    mock_analyzer, enable_vision_analysis=False
+                )
+                
+                # Should process artwork without vision analysis
+                assert len(result) == 1
+                assert mock_extract.call_count == 1
+                assert mock_build.call_count == 1
+    
+    def test_fetch_artwork_by_subject_with_scoring_vision_candidate_limit(self):
+        """Test fetch_artwork_by_subject_with_scoring with vision_candidate_limit parameter."""
+        creator = datacreator.PaintingDataCreator()
+        
+        # Mock the scoring method
+        with patch.object(creator, '_score_and_filter_artwork_parallel') as mock_score:
+            mock_score.return_value = [
+                ({'title': 'Artwork 1'}, 0.8),
+                ({'title': 'Artwork 2'}, 0.7)
+            ]
+            
+            poem_analysis = {'themes': ['nature']}
+            q_codes = ['Q7860']
+            
+            result = creator.fetch_artwork_by_subject_with_scoring(
+                poem_analysis, q_codes, count=2, vision_candidate_limit=3
+            )
+            
+            # Should call scoring method with vision_candidate_limit
+            mock_score.assert_called_once()
+            call_args = mock_score.call_args
+            assert call_args[1]['vision_candidate_limit'] == 3
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
