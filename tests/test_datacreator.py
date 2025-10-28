@@ -677,6 +677,11 @@ class TestArtworkDateFetching:
         
         result = self.creator.get_artwork_inception_date("invalid-url")
         assert result is None
+    
+    def test_get_artwork_inception_date_none_url(self):
+        """Test handling None wikidata_url (line 350 in wikidata_queries.py)."""
+        result = self.creator.get_artwork_inception_date(None)
+        assert result is None
 
 
 class TestProcessPaintingDataWithDates:

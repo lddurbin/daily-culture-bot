@@ -480,5 +480,85 @@ class TestPerformance:
         assert isinstance(result, list)
 
 
+class TestOpenAIAnalyzerEdgeCases:
+    """Test edge cases in OpenAI analyzer."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_client = Mock()
+        # Create mock theme and emotion mappings
+        self.mock_theme_mappings = {
+            "nature": {"keywords": ["nature", "forest"], "q_codes": ["Q7860"]},
+            "love": {"keywords": ["love", "heart"], "q_codes": ["Q316"]}
+        }
+        self.mock_emotion_mappings = {
+            "joy": {"q_codes": ["Q2385804"], "keywords": ["happy", "merry"]},
+            "sadness": {"q_codes": ["Q4"], "keywords": ["sad", "mourning"]},
+            "love": {"q_codes": ["Q316"], "keywords": ["love", "affection"]}
+        }
+        self.analyzer = OpenAIAnalyzer(self.mock_client, self.mock_theme_mappings, self.mock_emotion_mappings)
+    
+    def test_analyze_poem_with_ai_without_openai_client(self):
+        """Test analyze_poem_with_ai raises error when OpenAI client is not initialized (line 41)."""
+        # Create analyzer without client
+        analyzer = OpenAIAnalyzer(None, self.mock_theme_mappings, self.mock_emotion_mappings)
+        
+        poem = {"title": "Test", "text": "Test text"}
+        
+        with pytest.raises(ValueError, match="OpenAI client not initialized"):
+            analyzer.analyze_poem_with_ai(poem)
+    
+    def test_analyze_poem_with_ai_json_extraction_from_wrapped_response(self):
+        """Test analyze_poem_with_ai extracts JSON from wrapped response (line 109)."""
+        poem = {"title": "Test", "text": "Test text"}
+        
+        # Mock response with wrapped JSON
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = 'Here\'s the analysis:\n{"primary_emotions": ["joy"], "themes": ["nature"]}'
+        
+        self.mock_client.chat.completions.create.return_value = mock_response
+        
+        result = self.analyzer.analyze_poem_with_ai(poem)
+        
+        assert isinstance(result, dict)
+    
+    def test_select_best_artwork_matches_json_extraction_from_wrapped_response(self):
+        """Test select_best_artwork_matches extracts JSON from wrapped response (line 253)."""
+        poem = {"title": "Test", "text": "Test text"}
+        candidates = [{"title": "Artwork 1"}, {"title": "Artwork 2"}]
+        
+        # Mock response with wrapped JSON
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = 'Here\'s my selection:\n{"selections": [{"artwork_index": 0, "match_score": 0.8, "reasoning": "Good match"}]}'
+        
+        self.mock_client.chat.completions.create.return_value = mock_response
+        
+        result = self.analyzer.select_best_artwork_matches(poem, candidates, count=1)
+        
+        assert isinstance(result, list)
+    
+    def test_analyze_poem_with_secondary_emotions(self):
+        """Test analyze_poem_with_ai with secondary emotions (line 128)."""
+        poem = {"title": "Test", "text": "Test text"}
+        
+        # Mock response with secondary emotions
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = json.dumps({
+            "primary_emotions": ["joy"],
+            "secondary_emotions": ["love"],
+            "themes": ["nature"]
+        })
+        
+        self.mock_client.chat.completions.create.return_value = mock_response
+        
+        result = self.analyzer.analyze_poem_with_ai(poem)
+        
+        assert isinstance(result, dict)
+        assert "q_codes" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

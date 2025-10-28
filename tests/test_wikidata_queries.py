@@ -192,11 +192,45 @@ class TestCacheHitMiss:
     
     def test_cache_hit_returns_cached_data(self):
         """Test cache hit returns cached data."""
-        # Simplified test - just verify cache key generation works
-        cache_key = self.queries._get_cache_key("query_artwork_by_subject", q_codes=["Q1"], limit=1)
-        assert "query_artwork_by_subject" in cache_key
-        assert "Q1" in cache_key
-        assert "limit:1" in cache_key
+        # First, populate the cache
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {'bindings': [{'test': {'value': 'cached_data'}}]}
+        }
+        
+        with patch.object(self.queries.session, 'get', return_value=mock_response):
+            self.queries.query_artwork_by_subject(["Q1"], limit=1)
+        
+        # Now call again - should hit cache (lines 86-87)
+        with patch.object(self.queries.session, 'get', return_value=mock_response) as mock_get:
+            result = self.queries.query_artwork_by_subject(["Q1"], limit=1)
+            
+            # Should return cached result
+            assert len(result) > 0
+            # Session.get should not be called on cache hit
+            assert mock_get.call_count == 0
+    
+    def test_query_wikidata_paintings_cache_hit(self):
+        """Test query_wikidata_paintings returns cached data (lines 291-292)."""
+        # First, populate the cache
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {'bindings': [{'painting': {'value': 'Q123'}}]}
+        }
+        
+        with patch.object(self.queries.session, 'get', return_value=mock_response):
+            self.queries.query_wikidata_paintings(limit=1)
+        
+        # Now call again - should hit cache
+        with patch.object(self.queries.session, 'get', return_value=mock_response) as mock_get:
+            result = self.queries.query_wikidata_paintings(limit=1)
+            
+            # Should return cached result
+            assert len(result) > 0
+            # Session.get should not be called on cache hit
+            assert mock_get.call_count == 0
     
     
     def test_cache_miss_fetches_new_data(self):
@@ -343,6 +377,46 @@ class TestQueryArtworkByDirectDepicts:
             result = self.queries.query_artwork_by_direct_depicts(["Q10884"], limit=1)
             
             assert result == []
+
+
+class TestQCodesLimiting:
+    """Test Q-codes limiting functionality."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.queries = wikidata_queries.WikidataQueries(
+            "https://query.wikidata.org/sparql",
+            Mock(),
+            query_timeout=60,
+            query_cache={},
+            cache_max_size=50
+        )
+    
+    def test_query_artwork_limits_q_codes_to_10(self):
+        """Test that Q-codes are limited to 10 for performance (lines 91-92)."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'results': {'bindings': [{'test': {'value': 'data'}}]}
+        }
+        
+        # Create a list with more than 10 Q-codes
+        many_q_codes = [f"Q{i}" for i in range(15)]
+        
+        with patch.object(self.queries.session, 'get', return_value=mock_response) as mock_get:
+            # This should limit Q-codes to 10
+            self.queries.query_artwork_by_subject(many_q_codes, limit=1)
+            
+            # Verify that the query was made (should truncate to 10)
+            assert mock_get.called
+            call_args = mock_get.call_args
+            query_text = call_args[1]['params']['query']
+            
+            # Should only include first 10 Q-codes
+            for i in range(10):
+                assert f"Q{i}" in query_text
+            # Should not include Q-codes beyond index 10
+            assert "Q11" not in query_text
 
 
 if __name__ == '__main__':

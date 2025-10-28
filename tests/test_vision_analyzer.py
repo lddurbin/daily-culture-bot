@@ -460,5 +460,30 @@ class TestCacheManagement:
             assert analyzer.is_enabled() == False
 
 
+class TestVisionAnalyzerJSONExtraction:
+    """Test JSON extraction from wrapped responses."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.mock_client = Mock()
+        self.analyzer = VisionAnalyzer(self.mock_client)
+    
+    def test_analyze_artwork_image_json_extraction_from_wrapped_response(self):
+        """Test analyze_artwork_image extracts JSON from wrapped response (line 124)."""
+        # Mock response with wrapped JSON
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = 'Here\'s the analysis:\n{"detected_objects": ["tree", "flower"], "setting": "outdoor"}'
+        mock_response.usage = Mock()
+        mock_response.usage.total_tokens = 100
+        
+        self.mock_client.chat.completions.create.return_value = mock_response
+        
+        result = self.analyzer.analyze_artwork_image("http://example.com/image.jpg", "Test Artwork")
+        
+        assert result["success"] == True
+        assert "analysis" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

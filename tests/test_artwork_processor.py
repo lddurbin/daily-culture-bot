@@ -284,5 +284,109 @@ class TestGetWikipediaSummary:
         mock_print.assert_called_once()
 
 
+class TestProcessPaintingDataEdgeCases:
+    """Test edge cases in process_painting_data method."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        mock_session = Mock()
+        self.processor = artwork_processor.ArtworkProcessor(
+            wikidata_endpoint="https://example.com",
+            session=mock_session,
+            wikipedia_api="https://wikipedia.example.com"
+        )
+    
+    @patch('src.artwork_processor.time.sleep')
+    def test_process_painting_data_missing_wikidata_url(self, mock_sleep):
+        """Test processing with missing wikidata_url (line 143)."""
+        # Mock Wikidata response with missing wikidata_url
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": {
+                "bindings": [
+                    {
+                        "item": {"value": "http://www.wikidata.org/entity/Q123"},
+                        "image": {"value": "http://example.com/image.jpg"}
+                        # Missing wikidata_url field
+                    }
+                ]
+            }
+        }
+        self.processor.session.get.return_value = mock_response
+        
+        result = self.processor.process_painting_data([{"q_code": "Q123"}], None)
+        
+        # Should return empty list due to missing wikidata_url
+        assert result == []
+    
+    @patch('src.artwork_processor.time.sleep')
+    def test_process_painting_data_missing_image_url(self, mock_sleep):
+        """Test processing with missing image_url (line 143)."""
+        # Mock Wikidata response with missing image_url
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": {
+                "bindings": [
+                    {
+                        "item": {"value": "http://www.wikidata.org/entity/Q123"},
+                        "wikidata_url": {"value": "http://www.wikidata.org/entity/Q123"}
+                        # Missing image field
+                    }
+                ]
+            }
+        }
+        self.processor.session.get.return_value = mock_response
+        
+        result = self.processor.process_painting_data([{"q_code": "Q123"}], None)
+        
+        # Should return empty list due to missing image_url
+        assert result == []
+    
+    @patch('src.artwork_processor.time.sleep')
+    def test_process_painting_data_unknown_title_artist(self, mock_sleep):
+        """Test processing with unknown title/artist (line 152)."""
+        # Mock Wikidata response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": {
+                "bindings": [
+                    {
+                        "item": {"value": "http://www.wikidata.org/entity/Q123"},
+                        "wikidata_url": {"value": "http://www.wikidata.org/entity/Q123"},
+                        "image": {"value": "http://example.com/image.jpg"}
+                    }
+                ]
+            }
+        }
+        self.processor.session.get.return_value = mock_response
+        
+        # Mock get_painting_labels to return unknown values
+        with patch.object(self.processor, 'get_painting_labels') as mock_labels:
+            mock_labels.return_value = {
+                'title': 'Unknown Title',
+                'artist': 'Unknown Artist'
+            }
+            
+            result = self.processor.process_painting_data([{"q_code": "Q123"}], None)
+            
+            # Should return empty list due to unknown title/artist
+            assert result == []
+    
+    @patch('src.artwork_processor.time.sleep')
+    def test_process_painting_data_exception_handling(self, mock_sleep):
+        """Test exception handling in process_painting_data (lines 192-194)."""
+        # Mock session.get to raise an exception
+        self.processor.session.get.side_effect = Exception("Network error")
+        
+        result = self.processor.process_painting_data([{"q_code": "Q123"}], None)
+        
+        # Should return empty list due to exception
+        assert result == []
+        # Sleep is not called when exception occurs before processing
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
