@@ -203,5 +203,122 @@ class TestPerformance:
             pytest.skip(f"Implementation has bugs (expected for skeleton): {e}")
 
 
+class TestPrivateMethods:
+    """Test private methods of MatchExplainer."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.explainer = MatchExplainer()
+    
+    def test_get_overall_assessment(self):
+        """Test overall assessment based on score."""
+        assert self.explainer._get_overall_assessment(0.9) == "excellent"
+        assert self.explainer._get_overall_assessment(0.7) == "strong"
+        assert self.explainer._get_overall_assessment(0.5) == "moderate"
+        assert self.explainer._get_overall_assessment(0.3) == "weak"
+        assert self.explainer._get_overall_assessment(0.1) == "poor"
+    
+    def test_map_themes_to_connections(self):
+        """Test theme to connection mapping."""
+        poem_themes = ["nature", "love"]
+        artwork_subjects = ["Q7860", "Q198"]  # tree, war
+        
+        connections = self.explainer._map_themes_to_connections(poem_themes, artwork_subjects)
+        assert isinstance(connections, list)
+    
+    def test_map_emotions_to_connections(self):
+        """Test emotion to connection mapping."""
+        poem_emotions = ["joy", "melancholy"]
+        artwork_subjects = ["Q7860", "Q198"]
+        
+        connections = self.explainer._map_emotions_to_connections(poem_emotions, artwork_subjects)
+        assert isinstance(connections, list)
+    
+    def test_map_setting_to_connection(self):
+        """Test setting to connection mapping."""
+        poem_setting = "outdoor"
+        artwork_subjects = ["Q7860"]
+        vision_analysis = {"setting": "outdoor"}
+        
+        connection = self.explainer._map_setting_to_connection(poem_setting, artwork_subjects, vision_analysis)
+        assert connection is None or isinstance(connection, str)
+    
+    def test_map_time_to_connection(self):
+        """Test time of day to connection mapping."""
+        poem_time = "day"
+        artwork_subjects = ["Q7860"]
+        vision_analysis = {"time_of_day": "day"}
+        
+        connection = self.explainer._map_time_to_connection(poem_time, artwork_subjects, vision_analysis)
+        assert connection is None or isinstance(connection, str)
+    
+    def test_map_vision_to_connections(self):
+        """Test vision analysis to connection mapping."""
+        poem_analysis = {
+            "themes": ["nature"],
+            "primary_emotions": ["joy"]
+        }
+        vision_analysis = {
+            "detected_objects": ["tree"],
+            "setting": "outdoor",
+            "mood": "joyful"
+        }
+        
+        connections = self.explainer._map_vision_to_connections(poem_analysis, vision_analysis)
+        assert isinstance(connections, list)
+    
+    def test_find_concrete_matches(self):
+        """Test concrete matches finding."""
+        poem_analysis = {
+            "concrete_elements": {
+                "natural_objects": ["tree"],
+                "man_made_objects": [],
+                "living_beings": [],
+                "other_concrete_nouns": []
+            }
+        }
+        artwork = {
+            "subject_q_codes": ["Q7860"]
+        }
+        vision_analysis = {
+            "detected_objects": ["tree"]
+        }
+        
+        matches = self.explainer._find_concrete_matches(poem_analysis, artwork, vision_analysis)
+        assert isinstance(matches, dict)
+        assert "shared_objects" in matches
+    
+    def test_find_potential_tensions(self):
+        """Test potential tensions finding."""
+        poem_analysis = {
+            "emotional_tone": "joyful",
+            "themes": ["nature"]
+        }
+        artwork = {
+            "subject_q_codes": ["Q198"]  # war
+        }
+        vision_analysis = {
+            "mood": "dark"
+        }
+        
+        tensions = self.explainer._find_potential_tensions(poem_analysis, artwork, vision_analysis)
+        assert isinstance(tensions, list)
+    
+    def test_generate_summary(self):
+        """Test summary generation."""
+        score = 0.7
+        connections = ["nature theme match", "emotional resonance"]
+        concrete_matches = {
+            "shared_objects": ["tree"],
+            "setting_alignment": "outdoor",
+            "temporal_alignment": "day",
+            "emotional_resonance": "joyful"
+        }
+        
+        summary = self.explainer._generate_summary(score, connections, concrete_matches)
+        assert isinstance(summary, str)
+        assert len(summary) > 0
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
