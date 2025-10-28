@@ -152,12 +152,12 @@ class MatchExplainer:
             # Handle case where theme might be a list or other non-string type
             if isinstance(theme, str):
                 if theme.lower() in theme_mappings:
-                    connections.append(theme_mappings[theme.lower()])
+                    connections.append(theme_mappings[theme.lower()][0])
             elif isinstance(theme, list):
                 # If theme is a list, process each item
                 for sub_theme in theme:
                     if isinstance(sub_theme, str) and sub_theme.lower() in theme_mappings:
-                        connections.append(theme_mappings[sub_theme.lower()])
+                        connections.append(theme_mappings[sub_theme.lower()][0])
         
         return connections
     
@@ -180,12 +180,12 @@ class MatchExplainer:
             # Handle case where emotion might be a list or other non-string type
             if isinstance(emotion, str):
                 if emotion.lower() in emotion_mappings:
-                    connections.append(emotion_mappings[emotion.lower()])
+                    connections.append(emotion_mappings[emotion.lower()][0])
             elif isinstance(emotion, list):
                 # If emotion is a list, process each item
                 for sub_emotion in emotion:
                     if isinstance(sub_emotion, str) and sub_emotion.lower() in emotion_mappings:
-                        connections.append(emotion_mappings[sub_emotion.lower()])
+                        connections.append(emotion_mappings[sub_emotion.lower()][0])
         
         return connections
     
