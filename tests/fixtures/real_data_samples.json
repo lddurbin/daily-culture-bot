@@ -1,0 +1,260 @@
+{
+  "poem_analysis_samples": [
+    {
+      "input_poem": {
+        "title": "Nature's Symphony",
+        "author": "Test Poet",
+        "text": "The forest whispers ancient secrets, where golden light dances through leaves. A stream murmurs its eternal song, while flowers bloom in vibrant hues."
+      },
+      "analysis_result": {
+        "primary_emotions": ["joy", "peace", "wonder"],
+        "emotional_tone": "serene",
+        "themes": ["nature", "tranquility", "beauty"],
+        "narrative_elements": {
+          "setting": "forest",
+          "time": "day",
+          "mood": "peaceful"
+        },
+        "concrete_elements": {
+          "natural_objects": ["forest", "leaves", "stream", "flowers"],
+          "man_made_objects": [],
+          "living_beings": [],
+          "other_concrete_nouns": ["light", "song", "hues"]
+        },
+        "q_codes": ["Q7860", "Q191163", "Q16521"],
+        "analysis_confidence": 0.92,
+        "analysis_method": "openai"
+      }
+    },
+    {
+      "input_poem": {
+        "title": "Urban Melancholy",
+        "author": "City Poet",
+        "text": "The city breathes with mechanical rhythm, neon lights flicker in the rain. Crowds move like shadows through the streets, lost in their own private pain."
+      },
+      "analysis_result": {
+        "primary_emotions": ["melancholy", "loneliness", "nostalgia"],
+        "emotional_tone": "melancholic",
+        "themes": ["urban", "isolation", "modernity"],
+        "narrative_elements": {
+          "setting": "city",
+          "time": "night",
+          "mood": "melancholic"
+        },
+        "concrete_elements": {
+          "natural_objects": ["rain"],
+          "man_made_objects": ["neon lights", "streets"],
+          "living_beings": ["crowds"],
+          "other_concrete_nouns": ["rhythm", "shadows", "pain"]
+        },
+        "q_codes": ["Q515", "Q190951", "Q23444"],
+        "analysis_confidence": 0.88,
+        "analysis_method": "openai"
+      }
+    },
+    {
+      "input_poem": {
+        "title": "Nested Lists Test",
+        "author": "Test Author",
+        "text": "The moon rises over the mountains, casting silver light on the lake. Love and loss dance together, in this beautiful mistake."
+      },
+      "analysis_result": {
+        "primary_emotions": [["melancholy"], "peace", ["joy", "sadness"]],
+        "emotional_tone": "bittersweet",
+        "themes": [["nature", "night"], "love", ["loss", "beauty"]],
+        "narrative_elements": {
+          "setting": "mountain lake",
+          "time": "night",
+          "mood": "bittersweet"
+        },
+        "concrete_elements": {
+          "natural_objects": [["moon", "mountains"], "lake", "light"],
+          "man_made_objects": [],
+          "living_beings": [],
+          "other_concrete_nouns": [["love", "loss"], "dance", "mistake"]
+        },
+        "q_codes": ["Q405", "Q191163", "Q16521"],
+        "analysis_confidence": 0.85,
+        "analysis_method": "openai"
+      }
+    }
+  ],
+  "artwork_samples": [
+    {
+      "title": "Forest Stream",
+      "artist": "John Constable",
+      "year": 1820,
+      "subject_q_codes": ["Q7860", "Q191163"],
+      "genre_q_codes": ["Q191163"],
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Constable_Forest_Stream.jpg",
+      "description": "A peaceful forest scene with a babbling brook",
+      "fame_level": 25
+    },
+    {
+      "title": "Urban Night",
+      "artist": "Edward Hopper",
+      "year": 1942,
+      "subject_q_codes": ["Q515", "Q190951"],
+      "genre_q_codes": ["Q191163"],
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Hopper_Nighthawks.jpg",
+      "description": "A lonely diner scene at night",
+      "fame_level": 45
+    },
+    {
+      "title": "Mountain Lake",
+      "artist": "Albert Bierstadt",
+      "year": 1870,
+      "subject_q_codes": ["Q405", "Q191163"],
+      "genre_q_codes": ["Q191163"],
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/3/3a/Bierstadt_Mountain_Lake.jpg",
+      "description": "A serene mountain lake at sunset",
+      "fame_level": 30
+    }
+  ],
+  "vision_analysis_samples": [
+    {
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Constable_Forest_Stream.jpg",
+      "artwork_title": "Forest Stream",
+      "analysis_result": {
+        "colors": ["green", "brown", "blue", "gold"],
+        "composition": "landscape",
+        "mood": "peaceful",
+        "objects": ["trees", "stream", "rocks", "foliage"],
+        "style": "realistic",
+        "confidence": 0.94
+      }
+    },
+    {
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/2/2a/Hopper_Nighthawks.jpg",
+      "artwork_title": "Urban Night",
+      "analysis_result": {
+        "colors": ["yellow", "dark blue", "white", "red"],
+        "composition": "interior",
+        "mood": "lonely",
+        "objects": ["diner", "people", "counter", "windows"],
+        "style": "realistic",
+        "confidence": 0.91
+      }
+    },
+    {
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/3/3a/Bierstadt_Mountain_Lake.jpg",
+      "artwork_title": "Mountain Lake",
+      "analysis_result": {
+        "colors": ["blue", "purple", "orange", "white"],
+        "composition": "landscape",
+        "mood": "serene",
+        "objects": ["mountains", "lake", "sky", "clouds"],
+        "style": "romantic",
+        "confidence": 0.89
+      }
+    }
+  ],
+  "match_explanation_samples": [
+    {
+      "poem_analysis": {
+        "primary_emotions": ["joy", "peace"],
+        "emotional_tone": "serene",
+        "themes": ["nature", "tranquility"],
+        "concrete_elements": {
+          "natural_objects": ["forest", "stream"],
+          "man_made_objects": [],
+          "living_beings": [],
+          "other_concrete_nouns": []
+        }
+      },
+      "artwork": {
+        "title": "Forest Stream",
+        "artist": "John Constable",
+        "year": 1820,
+        "subject_q_codes": ["Q7860", "Q191163"],
+        "genre_q_codes": ["Q191163"]
+      },
+      "score": 0.87,
+      "explanation": {
+        "match_score": 0.87,
+        "why_matched": "Strong thematic alignment between poem's nature themes and artwork's forest subject matter",
+        "emotional_connection": "Both convey serenity and peace through natural imagery",
+        "visual_elements": "Poem mentions stream and forest, artwork depicts forest stream scene",
+        "overall_assessment": "Excellent match with high thematic and emotional alignment"
+      }
+    },
+    {
+      "poem_analysis": {
+        "primary_emotions": [["melancholy"], "peace"],
+        "emotional_tone": "bittersweet",
+        "themes": [["nature", "night"], "love"],
+        "concrete_elements": {
+          "natural_objects": [["moon", "mountains"], "lake"],
+          "man_made_objects": [],
+          "living_beings": [],
+          "other_concrete_nouns": []
+        }
+      },
+      "artwork": {
+        "title": "Mountain Lake",
+        "artist": "Albert Bierstadt",
+        "year": 1870,
+        "subject_q_codes": ["Q405", "Q191163"],
+        "genre_q_codes": ["Q191163"]
+      },
+      "score": 0.82,
+      "explanation": {
+        "match_score": 0.82,
+        "why_matched": "Good thematic match with nature and mountain themes",
+        "emotional_connection": "Both convey a sense of melancholy and beauty",
+        "visual_elements": "Poem mentions mountains and lake, artwork depicts mountain lake",
+        "overall_assessment": "Strong match with good thematic alignment despite some emotional complexity"
+      }
+    }
+  ],
+  "workflow_samples": [
+    {
+      "mode": "complementary",
+      "parameters": {
+        "count": 2,
+        "min_match_score": 0.4,
+        "max_fame_level": 30,
+        "fast_mode": true,
+        "enable_vision_analysis": true,
+        "enable_multi_pass": true,
+        "candidate_count": 5,
+        "explain_matches": true
+      },
+      "input_poem": {
+        "title": "Nature's Symphony",
+        "author": "Test Poet",
+        "text": "The forest whispers ancient secrets, where golden light dances through leaves."
+      },
+      "expected_results": {
+        "count": 2,
+        "min_score": 0.4,
+        "has_explanations": true,
+        "has_vision_analysis": true
+      }
+    },
+    {
+      "mode": "fast",
+      "parameters": {
+        "count": 1,
+        "min_match_score": 0.3,
+        "max_fame_level": 50,
+        "fast_mode": true,
+        "enable_vision_analysis": false,
+        "enable_multi_pass": false,
+        "candidate_count": 3,
+        "explain_matches": false
+      },
+      "input_poem": {
+        "title": "Simple Test",
+        "author": "Test Author",
+        "text": "A simple poem about nature and beauty."
+      },
+      "expected_results": {
+        "count": 1,
+        "min_score": 0.3,
+        "has_explanations": false,
+        "has_vision_analysis": false
+      }
+    }
+  ]
+}
