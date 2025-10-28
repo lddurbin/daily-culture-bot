@@ -235,13 +235,13 @@ class PoemFetcher:
         words = [word for word in text.split() if word.strip()]
         return len(words)
     
-    def filter_poems_by_word_count(self, poems: List[Dict], max_words: int = 200) -> List[Dict]:
+    def filter_poems_by_word_count(self, poems: List[Dict], max_words: int = 300) -> List[Dict]:
         """
         Filter poems to only include those with word count <= max_words.
         
         Args:
             poems: List of poem dictionaries
-            max_words: Maximum number of words allowed (default: 200)
+            max_words: Maximum number of words allowed (default: 300)
             
         Returns:
             List of poems that meet the word count criteria
@@ -259,13 +259,13 @@ class PoemFetcher:
         
         return filtered_poems
     
-    def fetch_poems_with_word_limit(self, count: int, max_words: int = 200, max_retries: int = 50) -> List[Dict]:
+    def fetch_poems_with_word_limit(self, count: int, max_words: int = 300, max_retries: int = 50) -> List[Dict]:
         """
         Fetch poems ensuring all are under the word limit by retrying as needed.
         
         Args:
             count: Number of poems to fetch
-            max_words: Maximum number of words allowed (default: 200)
+            max_words: Maximum number of words allowed (default: 300)
             max_retries: Maximum number of retry attempts (default: 50)
             
         Returns:

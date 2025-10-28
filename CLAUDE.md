@@ -74,7 +74,7 @@ The codebase follows a modular design with clear separation of concerns:
 - Handles two primary modes:
   1. **Standard mode**: Fetch artwork → optionally fetch poems
   2. **Complementary mode**: Fetch poems → analyze themes → fetch matching artwork
-- Contains email word count optimization (200-word limit for poems in emails)
+- Contains email word count optimization (300-word limit for poems in emails)
 
 **`src/datacreator.py`** - Artwork data orchestration
 - `PaintingDataCreator` class manages artwork fetching workflow
@@ -94,7 +94,7 @@ The codebase follows a modular design with clear separation of concerns:
 
 **`src/poem_fetcher.py`** - PoetryDB API integration
 - Fetches poems from poetrydb.org
-- Implements word count filtering (especially for email: 200-word max)
+- Implements word count filtering (especially for email: 300-word max)
 - Optionally fetches poet biographical data from Wikidata
 - Retry logic with fallback to sample data on failure
 
@@ -250,7 +250,7 @@ Match scoring logic in `src/datacreator.py`:
 
 - **Wikidata query timeout**: Default 60s, configurable via `--query-timeout`
 - **PoetryDB rate limits**: No explicit rate limiting, but retries on failure
-- **Email word count**: 200-word max per poem for optimal email length
+- **Email word count**: 300-word max per poem for optimal email length
 - **OpenAI cost**: ~$0.002/poem (GPT-4 mini model)
 - **Image downloads**: Only downloads on explicit `--save-image` flag
 

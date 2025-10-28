@@ -134,16 +134,16 @@ def main():
         
         # Fetch poems first
         if args.email:
-            # For email mode, use retry mechanism to ensure we get poems under 200 words
-            print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''} for email (≤200 words each)...")
+            # For email mode, use retry mechanism to ensure we get poems under 300 words
+            print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''} for email (≤300 words each)...")
             
             if args.fast:
                 print("⚡ Fast mode: Using sample poem data...")
                 poems = poem_fetcher_instance.create_sample_poems(args.poem_count)
                 # Apply word count filtering to sample poems
-                poems = poem_fetcher_instance.filter_poems_by_word_count(poems, max_words=200)
+                poems = poem_fetcher_instance.filter_poems_by_word_count(poems, max_words=300)
             else:
-                poems = poem_fetcher_instance.fetch_poems_with_word_limit(args.poem_count, max_words=200)
+                poems = poem_fetcher_instance.fetch_poems_with_word_limit(args.poem_count, max_words=300)
         else:
             # Regular complementary mode - fetch poems normally
             print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''}...")
@@ -392,16 +392,16 @@ def main():
         # Fetch poems if requested
         if args.poems or args.poems_only:
             if args.email:
-                # For email mode, use retry mechanism to ensure we get poems under 200 words
-                print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''} for email (≤200 words each)...")
+                # For email mode, use retry mechanism to ensure we get poems under 300 words
+                print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''} for email (≤300 words each)...")
                 
                 if args.fast:
                     print("⚡ Fast mode: Using sample poem data...")
                     poems = poem_fetcher_instance.create_sample_poems(args.poem_count)
                     # Apply word count filtering to sample poems
-                    poems = poem_fetcher_instance.filter_poems_by_word_count(poems, max_words=200)
+                    poems = poem_fetcher_instance.filter_poems_by_word_count(poems, max_words=300)
                 else:
-                    poems = poem_fetcher_instance.fetch_poems_with_word_limit(args.poem_count, max_words=200)
+                    poems = poem_fetcher_instance.fetch_poems_with_word_limit(args.poem_count, max_words=300)
             else:
                 # Regular mode - fetch poems normally
                 print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''}...")
