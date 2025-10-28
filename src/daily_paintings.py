@@ -52,6 +52,8 @@ def parse_arguments():
                        help='Wikidata query timeout in seconds (default: 60)')
     parser.add_argument('--no-vision', action='store_true',
                        help='Disable GPT-4 Vision analysis for artwork images')
+    parser.add_argument('--vision-candidates', type=int, default=6,
+                       help='Number of top candidates to analyze with vision (default: 6, 0 = analyze all)')
     parser.add_argument('--no-multi-pass', action='store_true',
                        help='Disable multi-pass analysis (skip AI-driven candidate selection)')
     parser.add_argument('--candidate-count', type=int, default=6,
@@ -117,7 +119,10 @@ def main():
     # Initialize match explainer for complementary mode
     match_explainer = None
     try:
-        from . import match_explainer
+        try:
+            from . import match_explainer
+        except ImportError:
+            import match_explainer
         match_explainer = match_explainer.MatchExplainer()
         print("✅ Match explainer initialized")
     except ImportError:
@@ -252,7 +257,8 @@ def main():
                     max_sitelinks=args.max_fame_level,
                     poet_birth_year=poet_birth_year,
                     poet_death_year=poet_death_year,
-                    enable_vision_analysis=enable_vision
+                    enable_vision_analysis=enable_vision,
+                    vision_candidate_limit=args.vision_candidates if enable_vision else 0
                 )
                 
                 if scored_candidates:
@@ -264,7 +270,10 @@ def main():
                         
                         # Import OpenAI analyzer for second pass
                         try:
-                            from . import openai_analyzer
+                            try:
+                                from . import openai_analyzer
+                            except ImportError:
+                                import openai_analyzer
                             openai_analyzer_instance = openai_analyzer.OpenAIAnalyzer(
                                 creator.openai_client if hasattr(creator, 'openai_client') else None,
                                 poem_analyzer_instance.theme_mappings,

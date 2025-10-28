@@ -674,7 +674,8 @@ class PaintingDataCreator:
     def fetch_artwork_by_subject_with_scoring(self, poem_analysis: Dict, q_codes: List[str], count: int = 1, 
                                              genres: List[str] = None, min_score: float = 0.4, 
                                              max_sitelinks: int = 20, poet_birth_year: Optional[int] = None,
-                                             poet_death_year: Optional[int] = None, enable_vision_analysis: bool = True) -> List[Tuple[Dict, float]]:
+                                             poet_death_year: Optional[int] = None, enable_vision_analysis: bool = True,
+                                             vision_candidate_limit: int = 6) -> List[Tuple[Dict, float]]:
         """
         Fetch visual artwork matching specific subjects/themes and score them for quality.
         Uses progressive fallback with scoring: try scoring first, then fall back to un-scored matches.
@@ -778,9 +779,10 @@ class PaintingDataCreator:
                     print(f"⚠️ No results with {strategy['name']}, trying next strategy...")
                     continue
                 
-                # Process and score each artwork using parallel processing
+                # Process and score each artwork using parallel processing with selective vision analysis
                 scored_artwork = self._score_and_filter_artwork_parallel(
-                    raw_data, strategy, poem_analysis, genres, (poet_birth_year, poet_death_year), analyzer, enable_vision_analysis
+                    raw_data, strategy, poem_analysis, genres, (poet_birth_year, poet_death_year), analyzer, enable_vision_analysis,
+                    selective_vision=True, vision_candidate_limit=vision_candidate_limit
                 )
                 
                 if scored_artwork:
@@ -800,7 +802,8 @@ class PaintingDataCreator:
     
     def _score_and_filter_artwork_parallel(self, raw_data: List[Dict], strategy: Dict, poem_analysis: Dict, 
                                           genres: List[str], poet_years: Tuple[Optional[int], Optional[int]], 
-                                          analyzer, enable_vision_analysis: bool = False, max_workers: int = 4) -> List[Tuple[Dict, float]]:
+                                          analyzer, enable_vision_analysis: bool = False, max_workers: int = 4, 
+                                          selective_vision: bool = True, vision_candidate_limit: int = 6) -> List[Tuple[Dict, float]]:
         """
         Process and score artwork from raw data using parallel processing.
         
@@ -819,7 +822,7 @@ class PaintingDataCreator:
         """
         scored_artwork = []
         
-        def process_single_artwork(item):
+        def process_single_artwork(item, enable_vision_for_this_item=False):
             """Process a single artwork item."""
             try:
                 # Extract fields from raw data
@@ -828,7 +831,7 @@ class PaintingDataCreator:
                     return None
                 
                 # Build artwork entry from fields
-                artwork_entry = self._build_artwork_entry_from_fields(fields, fields['wikidata_url'], enable_vision_analysis=enable_vision_analysis)
+                artwork_entry = self._build_artwork_entry_from_fields(fields, fields['wikidata_url'], enable_vision_analysis=enable_vision_for_this_item)
                 if not artwork_entry:
                     return None
                 
@@ -852,7 +855,8 @@ class PaintingDataCreator:
                 # Only return artwork that meets minimum score
                 if score >= strategy["min_score"]:
                     bonus_text = f" (+{depicts_bonus:.1f} depicts bonus)" if depicts_bonus > 0 else ""
-                    print(f"Scored: {artwork_entry['title']} by {artwork_entry['artist']} (score: {score:.2f}{bonus_text})")
+                    vision_text = " [vision analyzed]" if enable_vision_for_this_item else ""
+                    print(f"Scored: {artwork_entry['title']} by {artwork_entry['artist']} (score: {score:.2f}{bonus_text}{vision_text})")
                     return (artwork_entry, score)
                 
                 return None
@@ -861,20 +865,86 @@ class PaintingDataCreator:
                 print(f"Error processing artwork data: {e}")
                 return None
         
-        # Process artwork in parallel
-        print(f"🔄 Processing {len(raw_data)} artworks in parallel (max {max_workers} workers)...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            future_to_item = {executor.submit(process_single_artwork, item): item for item in raw_data}
+        # Implement selective vision analysis strategy
+        if enable_vision_analysis and selective_vision and self.vision_analyzer and self.vision_analyzer.is_enabled():
+            print(f"🎯 Selective vision analysis: First pass without vision, then analyze top {vision_candidate_limit} candidates")
             
-            # Collect results as they complete
-            for future in concurrent.futures.as_completed(future_to_item):
-                result = future.result()
-                if result is not None:
-                    scored_artwork.append(result)
+            # First pass: Process all artworks without vision analysis
+            print(f"🔄 First pass: Processing {len(raw_data)} artworks without vision analysis...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_item = {executor.submit(process_single_artwork, item, False): item for item in raw_data}
+                
+                for future in concurrent.futures.as_completed(future_to_item):
+                    result = future.result()
+                    if result is not None:
+                        scored_artwork.append(result)
+            
+            # Sort by score descending
+            scored_artwork.sort(reverse=True, key=lambda x: x[1])
+            
+            # Second pass: Apply vision analysis to top candidates
+            if len(scored_artwork) > 0:
+                top_candidates = scored_artwork[:min(vision_candidate_limit, len(scored_artwork))]
+                print(f"🔍 Second pass: Applying vision analysis to top {len(top_candidates)} candidates...")
+                
+                # Re-process top candidates with vision analysis
+                vision_enhanced_candidates = []
+                for artwork_entry, original_score in top_candidates:
+                    # Find the original raw data for this artwork
+                    original_item = None
+                    for item in raw_data:
+                        if self._extract_artwork_fields_from_raw(item) and self._extract_artwork_fields_from_raw(item).get('title') == artwork_entry['title']:
+                            original_item = item
+                            break
+                    
+                    if original_item:
+                        # Re-process with vision analysis
+                        fields = self._extract_artwork_fields_from_raw(original_item)
+                        if fields:
+                            enhanced_entry = self._build_artwork_entry_from_fields(fields, fields['wikidata_url'], enable_vision_analysis=True)
+                            if enhanced_entry:
+                                # Re-score with vision analysis
+                                poet_birth_year, poet_death_year = poet_years
+                                enhanced_score = analyzer.score_artwork_match(
+                                    poem_analysis, 
+                                    enhanced_entry["subject_q_codes"], 
+                                    enhanced_entry["genre_q_codes"],
+                                    artwork_year=enhanced_entry.get('year'),
+                                    poet_birth_year=poet_birth_year,
+                                    poet_death_year=poet_death_year
+                                )
+                                
+                                # Apply depicts bonus
+                                depicts_bonus = strategy.get("depicts_bonus", 0.0)
+                                if depicts_bonus > 0:
+                                    enhanced_score += depicts_bonus
+                                    enhanced_score = min(enhanced_score, 1.0)
+                                
+                                vision_enhanced_candidates.append((enhanced_entry, enhanced_score))
+                                print(f"🎨 Vision-enhanced: {enhanced_entry['title']} (score: {enhanced_score:.2f})")
+                
+                # Replace top candidates with vision-enhanced versions
+                if vision_enhanced_candidates:
+                    scored_artwork = vision_enhanced_candidates + scored_artwork[len(top_candidates):]
+                    scored_artwork.sort(reverse=True, key=lambda x: x[1])
+                    print(f"✅ Vision analysis applied to {len(vision_enhanced_candidates)} top candidates")
         
-        # Sort by score descending
-        scored_artwork.sort(reverse=True, key=lambda x: x[1])
+        else:
+            # Standard processing (all artworks with or without vision analysis)
+            vision_enabled = enable_vision_analysis and self.vision_analyzer and self.vision_analyzer.is_enabled()
+            vision_text = "with vision analysis" if vision_enabled else "without vision analysis"
+            print(f"🔄 Processing {len(raw_data)} artworks in parallel (max {max_workers} workers) {vision_text}...")
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_item = {executor.submit(process_single_artwork, item, vision_enabled): item for item in raw_data}
+                
+                for future in concurrent.futures.as_completed(future_to_item):
+                    result = future.result()
+                    if result is not None:
+                        scored_artwork.append(result)
+            
+            # Sort by score descending
+            scored_artwork.sort(reverse=True, key=lambda x: x[1])
         
         return scored_artwork
 
