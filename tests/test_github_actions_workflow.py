@@ -9,7 +9,7 @@ import pytest
 import os
 import sys
 import subprocess
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, mock_open
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -46,36 +46,22 @@ class TestGitHubActionsEnvironment:
         try:
             from daily_paintings import parse_arguments
             
-            # Test with parameters that match the workflow YAML
-            test_args = [
-                '--complementary',
-                '--count', '2',
-                '--min-match-score', '0.4',
-                '--max-fame-level', '30',
-                '--fast',
-                '--enable-vision-analysis',
-                '--enable-multi-pass',
-                '--candidate-count', '5',
-                '--explain-matches',
-                '--email', 'test@example.com',
-                '--email-format', 'both'
-            ]
-            
-            # Parse arguments
-            args = parse_arguments()
-            
-            # Verify all expected arguments are available
-            assert hasattr(args, 'complementary')
-            assert hasattr(args, 'count')
-            assert hasattr(args, 'min_match_score')
-            assert hasattr(args, 'max_fame_level')
-            assert hasattr(args, 'fast')
-            assert hasattr(args, 'enable_vision_analysis')
-            assert hasattr(args, 'enable_multi_pass')
-            assert hasattr(args, 'candidate_count')
-            assert hasattr(args, 'explain_matches')
-            assert hasattr(args, 'email')
-            assert hasattr(args, 'email_format')
+            # Mock sys.argv to avoid actual parsing
+            with patch('sys.argv', ['daily_paintings.py']):
+                args = parse_arguments()
+                
+                # Verify all expected arguments are available
+                assert hasattr(args, 'complementary')
+                assert hasattr(args, 'count')
+                assert hasattr(args, 'min_match_score')
+                assert hasattr(args, 'max_fame_level')
+                assert hasattr(args, 'fast')
+                assert hasattr(args, 'no_vision')  # Updated argument name
+                assert hasattr(args, 'no_multi_pass')  # Updated argument name
+                assert hasattr(args, 'candidate_count')
+                assert hasattr(args, 'explain_matches')
+                assert hasattr(args, 'email')
+                assert hasattr(args, 'email_format')
         
         except ImportError as e:
             pytest.skip(f"Required module not available: {e}")
