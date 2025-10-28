@@ -46,7 +46,7 @@ class MatchExplainer:
             "potential_tensions": [],
             "analysis_details": {
                 "poem_themes": poem_analysis.get("themes", []),
-                "poem_emotions": poem_analysis.get("primary_emotions", []) + poem_analysis.get("secondary_emotions", []),
+                "poem_emotions": self._flatten_emotions(poem_analysis.get("primary_emotions", [])) + self._flatten_emotions(poem_analysis.get("secondary_emotions", [])),
                 "artwork_subjects": artwork.get("subject_q_codes", []),
                 "artwork_genres": artwork.get("genre_q_codes", [])
             }
@@ -68,6 +68,16 @@ class MatchExplainer:
         explanation["potential_tensions"] = tensions
         
         return explanation
+    
+    def _flatten_emotions(self, emotions):
+        """Flatten emotions list, handling nested lists."""
+        flattened = []
+        for emotion in emotions:
+            if isinstance(emotion, str):
+                flattened.append(emotion)
+            elif isinstance(emotion, list):
+                flattened.extend([e for e in emotion if isinstance(e, str)])
+        return flattened
     
     def _get_overall_assessment(self, score: float) -> str:
         """Get overall assessment based on match score."""
@@ -95,7 +105,7 @@ class MatchExplainer:
         connections.extend(theme_connections)
         
         # Emotional connections
-        poem_emotions = poem_analysis.get("primary_emotions", []) + poem_analysis.get("secondary_emotions", [])
+        poem_emotions = self._flatten_emotions(poem_analysis.get("primary_emotions", [])) + self._flatten_emotions(poem_analysis.get("secondary_emotions", []))
         emotional_connections = self._map_emotions_to_connections(poem_emotions, artwork_subjects)
         connections.extend(emotional_connections)
         
@@ -277,7 +287,7 @@ class MatchExplainer:
         poem_man_made = poem_objects.get("man_made_objects", [])
         poem_living = poem_objects.get("living_beings", [])
         
-        all_poem_objects = poem_natural + poem_man_made + poem_living
+        all_poem_objects = self._flatten_emotions(poem_natural) + self._flatten_emotions(poem_man_made) + self._flatten_emotions(poem_living)
         
         if vision_analysis and vision_analysis.get("success"):
             vision_objects = vision_analysis.get("analysis", {}).get("detected_objects", [])
@@ -295,7 +305,7 @@ class MatchExplainer:
             concrete_matches["temporal_alignment"] = f"Both are set during {poem_time}"
         
         # Emotional resonance
-        poem_emotions = poem_analysis.get("primary_emotions", [])
+        poem_emotions = self._flatten_emotions(poem_analysis.get("primary_emotions", []))
         if poem_emotions:
             concrete_matches["emotional_resonance"] = f"Both convey {', '.join(poem_emotions[:2])} emotions"
         
@@ -355,6 +365,9 @@ class MatchExplainer:
         
         if connections:
             primary_connection = connections[0]
+            # Handle case where primary_connection might be a list
+            if isinstance(primary_connection, list):
+                primary_connection = primary_connection[0] if primary_connection else "thematic alignment"
             return f"This is a {strength} match because {primary_connection.lower()}"
         elif concrete_matches.get("shared_objects"):
             objects = concrete_matches["shared_objects"]
