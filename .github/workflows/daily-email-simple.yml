@@ -1,9 +1,6 @@
-name: Daily Culture Email
+name: Daily Culture Email (Manual)
 
 on:
-  schedule:
-    # Run daily at 6:00 AM New Zealand time (NZDT = UTC+13, so 5pm UTC previous day)
-    - cron: '0 17 * * *'
   workflow_dispatch:
 
 jobs:
@@ -24,7 +21,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      - name: Send daily culture email
+      - name: Send daily culture email (manual)
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -41,4 +38,5 @@ jobs:
             --max-fame-level 20 \
             --min-match-score 0.3 \
             --candidate-count 6 \
-            --no-vision
+            --vision-candidates 3 \
+            --explain-matches

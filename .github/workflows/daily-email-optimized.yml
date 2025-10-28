@@ -57,5 +57,6 @@ jobs:
             --max-fame-level 20 \
             --min-match-score 0.3 \
             --candidate-count 6 \
-            --no-vision \
+            --vision-candidates 6 \
+            --explain-matches \
             --query-timeout 30
