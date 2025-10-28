@@ -190,8 +190,9 @@ Return ONLY valid JSON with no additional text."""
             
             # Get depicts information
             depicts_list = []
-            if artwork.get('vision_analysis', {}).get('success'):
-                detected_objects = artwork['vision_analysis']['analysis'].get('detected_objects', [])
+            vision_analysis = artwork.get('vision_analysis')
+            if vision_analysis and isinstance(vision_analysis, dict) and vision_analysis.get('success'):
+                detected_objects = vision_analysis.get('analysis', {}).get('detected_objects', [])
                 depicts_list = detected_objects[:5]  # Limit to top 5 objects
             
             description = f"{i}. \"{title}\" by {artist} ({year}) - {medium}"
