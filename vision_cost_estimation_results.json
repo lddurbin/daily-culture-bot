@@ -1,0 +1,157 @@
+{
+  "success": true,
+  "cost_analysis": {
+    "total_images": 4,
+    "total_tokens": 4953,
+    "total_cost": 0.05987000000000001,
+    "avg_tokens_per_image": 1238.25,
+    "avg_cost_per_image": 0.014967500000000002,
+    "input_cost": 0.044360000000000004,
+    "output_cost": 0.01551,
+    "breakdown": {
+      "prompt_tokens": 4436,
+      "completion_tokens": 517
+    }
+  },
+  "results": [
+    {
+      "success": true,
+      "analysis": {
+        "detected_objects": [
+          "stars",
+          "moon",
+          "cypress tree",
+          "village"
+        ],
+        "dominant_colors": [
+          "blue",
+          "yellow",
+          "black"
+        ],
+        "color_palette": "vibrant",
+        "setting": "celestial",
+        "time_of_day": "night",
+        "season_indicators": "none",
+        "human_presence": "absent",
+        "composition": "expansive",
+        "spatial_qualities": "open",
+        "movement_energy": "flowing",
+        "mood": "dramatic",
+        "style_characteristics": "impressionistic"
+      },
+      "tokens": {
+        "prompt_tokens": 1024,
+        "completion_tokens": 135,
+        "total_tokens": 1159
+      },
+      "processing_time": 40.80842709541321,
+      "title": "The Starry Night"
+    },
+    {
+      "success": true,
+      "analysis": {
+        "detected_objects": [
+          "woman",
+          "landscape"
+        ],
+        "dominant_colors": [
+          "brown",
+          "green",
+          "blue"
+        ],
+        "color_palette": "muted",
+        "setting": "abstract",
+        "time_of_day": "ambiguous",
+        "season_indicators": "none",
+        "human_presence": "central",
+        "composition": "intimate",
+        "spatial_qualities": "centered",
+        "movement_energy": "static",
+        "mood": "serene",
+        "style_characteristics": "realistic"
+      },
+      "tokens": {
+        "prompt_tokens": 1024,
+        "completion_tokens": 123,
+        "total_tokens": 1147
+      },
+      "processing_time": 7.3702311515808105,
+      "title": "Mona Lisa"
+    },
+    {
+      "success": true,
+      "analysis": {
+        "detected_objects": [
+          "waves",
+          "boats",
+          "mountain"
+        ],
+        "dominant_colors": [
+          "blue",
+          "white",
+          "beige"
+        ],
+        "color_palette": "cool",
+        "setting": "seascape",
+        "time_of_day": "ambiguous",
+        "season_indicators": "none",
+        "human_presence": "peripheral",
+        "composition": "expansive",
+        "spatial_qualities": "open",
+        "movement_energy": "explosive",
+        "mood": "dramatic",
+        "style_characteristics": "symbolic"
+      },
+      "tokens": {
+        "prompt_tokens": 1364,
+        "completion_tokens": 130,
+        "total_tokens": 1494
+      },
+      "processing_time": 36.07113981246948,
+      "title": "The Great Wave off Kanagawa"
+    },
+    {
+      "success": true,
+      "analysis": {
+        "detected_objects": [
+          "figure",
+          "bridge",
+          "sky",
+          "water"
+        ],
+        "dominant_colors": [
+          "red",
+          "blue",
+          "orange"
+        ],
+        "color_palette": "vibrant",
+        "setting": "abstract",
+        "time_of_day": "dusk",
+        "season_indicators": "none",
+        "human_presence": "central",
+        "composition": "chaotic",
+        "spatial_qualities": "open",
+        "movement_energy": "flowing",
+        "mood": "dramatic",
+        "style_characteristics": "symbolic"
+      },
+      "tokens": {
+        "prompt_tokens": 1024,
+        "completion_tokens": 129,
+        "total_tokens": 1153
+      },
+      "processing_time": 6.887701988220215,
+      "title": "The Scream"
+    },
+    {
+      "success": false,
+      "error": "Error code: 400 - {'error': {'message': 'Error while downloading https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Claude_Monet_-_Water_Lilies_-_1919%2C_Metropolitan_Museum_of_Art.jpg/1280px-Claude_Monet_-_Water_Lilies_-_1919%2C_Metropolitan_Museum_of_Art.jpg.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_image_url'}}",
+      "title": "Water Lilies"
+    }
+  ],
+  "recommendations": {
+    "proceed": false,
+    "moderate": true,
+    "high_cost": false
+  }
+}

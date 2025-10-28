@@ -29,19 +29,25 @@ try:
     from . import wikidata_queries
     from . import artwork_processor
     from . import poem_analyzer
+    from . import vision_analyzer
 except ImportError:
     # Fallback for when running as standalone module
     try:
         import wikidata_queries
         import artwork_processor
         import poem_analyzer
+        import vision_analyzer
     except ImportError:
         wikidata_queries = None
         artwork_processor = None
         poem_analyzer = None
+        vision_analyzer = None
 
 # Check if poem analyzer is available
 POEM_ANALYZER_AVAILABLE = poem_analyzer is not None
+
+# Check if vision analyzer is available
+VISION_ANALYZER_AVAILABLE = vision_analyzer is not None
 
 
 class PaintingDataCreator:
@@ -88,6 +94,14 @@ class PaintingDataCreator:
         else:
             self.processor = None
             print("⚠️ Warning: artwork_processor module not available")
+        
+        # Initialize vision analyzer
+        if vision_analyzer:
+            self.vision_analyzer = vision_analyzer.VisionAnalyzer()
+            print("✅ Vision analyzer initialized")
+        else:
+            self.vision_analyzer = None
+            print("⚠️ Warning: vision_analyzer module not available")
 
     def _get_cache_key(self, query_type: str, **params) -> str:
         """Generate a cache key for query parameters."""
@@ -655,7 +669,7 @@ class PaintingDataCreator:
     def fetch_artwork_by_subject_with_scoring(self, poem_analysis: Dict, q_codes: List[str], count: int = 1, 
                                              genres: List[str] = None, min_score: float = 0.4, 
                                              max_sitelinks: int = 20, poet_birth_year: Optional[int] = None,
-                                             poet_death_year: Optional[int] = None) -> List[Tuple[Dict, float]]:
+                                             poet_death_year: Optional[int] = None, enable_vision_analysis: bool = True) -> List[Tuple[Dict, float]]:
         """
         Fetch visual artwork matching specific subjects/themes and score them for quality.
         Uses progressive fallback with scoring: try scoring first, then fall back to un-scored matches.
@@ -694,22 +708,36 @@ class PaintingDataCreator:
         # Progressive fallback with scoring
         fallback_strategies = [
             {
+                "name": "direct depicts matches",
+                "artwork_types": ["Q3305213", "Q125191", "Q860861"],  # paintings, photos, sculptures
+                "max_sitelinks": max_sitelinks,
+                "min_score": min_score,
+                "use_direct_depicts": True,  # NEW: Use direct depicts query
+                "depicts_bonus": 0.5  # NEW: Bonus for direct depicts matches
+            },
+            {
                 "name": "scored specific artwork",
                 "artwork_types": ["Q3305213", "Q125191", "Q860861"],  # paintings, photos, sculptures
                 "max_sitelinks": max_sitelinks,
-                "min_score": min_score
+                "min_score": min_score,
+                "use_direct_depicts": False,
+                "depicts_bonus": 0.0
             },
             {
                 "name": "scored broader artwork",
                 "artwork_types": ["Q3305213", "Q125191", "Q860861", "Q42973", "Q93184", "Q11661"],  # + drawings, prints, murals
                 "max_sitelinks": max_sitelinks + 10,
-                "min_score": min_score * 0.8  # Lower threshold
+                "min_score": min_score * 0.8,  # Lower threshold
+                "use_direct_depicts": False,
+                "depicts_bonus": 0.0
             },
             {
                 "name": "un-scored artwork",
                 "artwork_types": ["Q3305213", "Q125191", "Q860861", "Q42973", "Q93184", "Q11661", "Q11060274", "Q1044167"],
                 "max_sitelinks": max_sitelinks + 20,
-                "min_score": 0.0  # Accept any artwork
+                "min_score": 0.0,  # Accept any artwork
+                "use_direct_depicts": False,
+                "depicts_bonus": 0.0
             }
         ]
         
@@ -718,15 +746,28 @@ class PaintingDataCreator:
             
             try:
                 # Fetch artwork with current strategy
-                raw_data = self.query_artwork_by_subject(
-                    q_codes=q_codes,
-                    limit=count * 10,  # Fetch more for better selection
-                    offset=0,
-                    random_order=True,
-                    genres=genres,
-                    max_sitelinks=strategy["max_sitelinks"],
-                    artwork_types=strategy["artwork_types"]
-                )
+                if strategy.get("use_direct_depicts", False):
+                    # Use direct depicts query for more targeted matching
+                    raw_data = self.queries.query_artwork_by_direct_depicts(
+                        q_codes=q_codes,
+                        limit=count * 10,  # Fetch more for better selection
+                        offset=0,
+                        random_order=True,
+                        genres=genres,
+                        max_sitelinks=strategy["max_sitelinks"],
+                        artwork_types=strategy["artwork_types"]
+                    )
+                else:
+                    # Use regular subject query
+                    raw_data = self.query_artwork_by_subject(
+                        q_codes=q_codes,
+                        limit=count * 10,  # Fetch more for better selection
+                        offset=0,
+                        random_order=True,
+                        genres=genres,
+                        max_sitelinks=strategy["max_sitelinks"],
+                        artwork_types=strategy["artwork_types"]
+                    )
                 
                 if not raw_data:
                     print(f"⚠️ No results with {strategy['name']}, trying next strategy...")
@@ -734,7 +775,7 @@ class PaintingDataCreator:
                 
                 # Process and score each artwork using extracted method
                 scored_artwork = self._score_and_filter_artwork(
-                    raw_data, strategy, poem_analysis, genres, (poet_birth_year, poet_death_year), analyzer
+                    raw_data, strategy, poem_analysis, genres, (poet_birth_year, poet_death_year), analyzer, enable_vision_analysis
                 )
                 
                 if scored_artwork:
@@ -754,7 +795,7 @@ class PaintingDataCreator:
     
     def _score_and_filter_artwork(self, raw_data: List[Dict], strategy: Dict, poem_analysis: Dict, 
                                  genres: List[str], poet_years: Tuple[Optional[int], Optional[int]], 
-                                 analyzer) -> List[Tuple[Dict, float]]:
+                                 analyzer, enable_vision_analysis: bool = False) -> List[Tuple[Dict, float]]:
         """
         Process and score artwork from raw data using the given strategy.
         
@@ -780,7 +821,7 @@ class PaintingDataCreator:
                     continue
                 
                 # Build artwork entry from fields
-                artwork_entry = self._build_artwork_entry_from_fields(fields, fields['wikidata_url'])
+                artwork_entry = self._build_artwork_entry_from_fields(fields, fields['wikidata_url'], enable_vision_analysis=enable_vision_analysis)
                 if not artwork_entry:
                     continue
                 
@@ -794,10 +835,17 @@ class PaintingDataCreator:
                     poet_death_year=poet_death_year
                 )
                 
+                # Apply depicts bonus for direct depicts matches
+                depicts_bonus = strategy.get("depicts_bonus", 0.0)
+                if depicts_bonus > 0:
+                    score += depicts_bonus
+                    score = min(score, 1.0)  # Cap at 1.0
+                
                 # Only include artwork that meets minimum score
                 if score >= strategy["min_score"]:
                     scored_artwork.append((artwork_entry, score))
-                    print(f"Scored: {artwork_entry['title']} by {artwork_entry['artist']} (score: {score:.2f})")
+                    bonus_text = f" (+{depicts_bonus:.1f} depicts bonus)" if depicts_bonus > 0 else ""
+                    print(f"Scored: {artwork_entry['title']} by {artwork_entry['artist']} (score: {score:.2f}{bonus_text})")
                 
                 # Add delay to be respectful to APIs
                 time.sleep(0.5)
@@ -842,13 +890,14 @@ class PaintingDataCreator:
             'artwork_type': artwork_type
         }
 
-    def _build_artwork_entry_from_fields(self, fields: Dict, wikidata_url: str) -> Optional[Dict]:
+    def _build_artwork_entry_from_fields(self, fields: Dict, wikidata_url: str, enable_vision_analysis: bool = True) -> Optional[Dict]:
         """
         Build complete artwork entry from extracted fields.
         
         Args:
             fields: Dict with extracted artwork fields
             wikidata_url: Wikidata URL for the artwork
+            enable_vision_analysis: Whether to perform vision analysis on the artwork image
             
         Returns:
             Complete artwork entry dict or None if validation fails
@@ -873,6 +922,25 @@ class PaintingDataCreator:
         # Get artwork inception date (year)
         artwork_year = self.get_artwork_inception_date(wikidata_url)
         
+        # Perform vision analysis if enabled and vision analyzer is available
+        vision_analysis = None
+        vision_q_codes = []
+        if enable_vision_analysis and self.vision_analyzer and self.vision_analyzer.is_enabled() and image_url:
+            try:
+                print(f"🔍 Analyzing artwork image: {title}")
+                vision_analysis = self.vision_analyzer.analyze_artwork_image(image_url, title)
+                
+                if vision_analysis.get("success"):
+                    # Extract Q-codes from vision analysis
+                    vision_q_codes = self.vision_analyzer.extract_q_codes_from_vision_analysis(vision_analysis)
+                    print(f"🎨 Vision analysis completed for {title}: {len(vision_q_codes)} Q-codes extracted")
+                else:
+                    print(f"⚠️ Vision analysis failed for {title}: {vision_analysis.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                print(f"❌ Error during vision analysis for {title}: {e}")
+                vision_analysis = None
+        
         # Create artwork entry
         artwork_entry = {
             "title": self.clean_text(title),
@@ -889,7 +957,9 @@ class PaintingDataCreator:
             "sitelinks": int(fields['sitelinks']),
             "subject_q_codes": [fields['subject']] if fields['subject'] else [],
             "genre_q_codes": [fields['genre']] if fields['genre'] else [],
-            "artwork_type": fields['artwork_type']
+            "artwork_type": fields['artwork_type'],
+            "vision_analysis": vision_analysis,
+            "vision_q_codes": vision_q_codes
         }
         
         return artwork_entry
@@ -911,6 +981,30 @@ class PaintingDataCreator:
                 "Q1044167": "Illustration"    # illustration
             }
             return medium_mapping.get(artwork_type, "Mixed media")
+    
+    def get_vision_analyzer_stats(self) -> Dict:
+        """Get vision analyzer cache statistics."""
+        if self.vision_analyzer:
+            return self.vision_analyzer.get_cache_stats()
+        else:
+            return {
+                "total_entries": 0,
+                "successful_analyses": 0,
+                "failed_analyses": 0,
+                "total_tokens_used": 0,
+                "cache_hit_rate": "N/A"
+            }
+    
+    def clear_vision_analyzer_cache(self):
+        """Clear the vision analyzer cache."""
+        if self.vision_analyzer:
+            self.vision_analyzer.clear_cache()
+        else:
+            print("⚠️ Vision analyzer not available")
+    
+    def is_vision_analysis_enabled(self) -> bool:
+        """Check if vision analysis is enabled."""
+        return self.vision_analyzer is not None and self.vision_analyzer.is_enabled()
 
     def get_daily_painting(self, max_sitelinks: int = 20) -> Dict:
         """

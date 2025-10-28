@@ -140,6 +140,12 @@ class PoemAnalyzer:
                 "emotions": all_emotions,  # Combined emotions for backward compatibility
                 "emotional_tone": ai_analysis.get("emotional_tone", "unknown"),
                 "themes": combined_themes,
+                "narrative_elements": ai_analysis.get("narrative_elements", {}),
+                "concrete_elements": ai_analysis.get("concrete_elements", {}),
+                "symbolic_objects": ai_analysis.get("symbolic_objects", []),
+                "spatial_qualities": ai_analysis.get("spatial_qualities", "unknown"),
+                "movement_energy": ai_analysis.get("movement_energy", "unknown"),
+                "color_references": ai_analysis.get("color_references", []),
                 "imagery_type": ai_analysis.get("imagery_type", "concrete"),
                 "visual_aesthetic": ai_analysis.get("visual_aesthetic", {}),
                 "subject_suggestions": ai_analysis.get("subject_suggestions", []),
@@ -275,6 +281,12 @@ class PoemAnalyzer:
             "secondary_emotions": [],
             "emotional_tone": "unknown",
             "themes": [],
+            "narrative_elements": {},
+            "concrete_elements": {},
+            "symbolic_objects": [],
+            "spatial_qualities": "unknown",
+            "movement_energy": "unknown",
+            "color_references": [],
             "imagery_type": "concrete",
             "visual_aesthetic": {},
             "subject_suggestions": [],
@@ -394,6 +406,13 @@ class PoemAnalyzer:
         Score how well an artwork matches a poem's emotional and thematic profile.
         Returns score from 0.0 (poor match) to 1.0 (excellent match).
         
+        New scoring weights (as per user requirements):
+        - Concrete Elements: 35% (setting, objects, composition)
+        - Theme/Subject: 30% (keep this)
+        - Emotional Tone: 25% (reduce from 40%)
+        - Genre: 10% (reduce from 20%)
+        - Intensity: 5% (reduce from 10%)
+        
         Args:
             poem_analysis: Dictionary containing poem analysis results
             artwork_q_codes: List of Q-codes associated with the artwork
@@ -410,7 +429,23 @@ class PoemAnalyzer:
         
         score = 0.0
         
-        # 1. Primary emotion match (40% weight)
+        # 1. Concrete Elements Match (35% weight) - NEW PRIORITY
+        concrete_score = self._score_concrete_elements(poem_analysis, artwork_q_codes)
+        score += concrete_score * 0.35
+        
+        # 2. Theme/subject match (30% weight) - KEPT SAME
+        themes = poem_analysis.get("themes", [])
+        theme_q_codes = []
+        
+        for theme in themes:
+            if theme.lower() in self.theme_mappings:
+                theme_q_codes.extend(self.theme_mappings[theme.lower()]["q_codes"])
+        
+        theme_matches = len(set(artwork_q_codes) & set(theme_q_codes))
+        if theme_matches > 0:
+            score += 0.3
+        
+        # 3. Emotional Tone Match (25% weight) - REDUCED FROM 40%
         primary_emotions = poem_analysis.get("primary_emotions", [])
         secondary_emotions = poem_analysis.get("secondary_emotions", [])
         
@@ -430,23 +465,11 @@ class PoemAnalyzer:
         secondary_matches = len(set(artwork_q_codes) & set(secondary_emotion_q_codes))
         
         if primary_matches > 0:
-            score += 0.4  # Full weight for primary emotion match
+            score += 0.25  # Reduced from 0.4 to 0.25
         elif secondary_matches > 0:
-            score += 0.2  # Half weight for secondary emotion match
+            score += 0.125  # Reduced from 0.2 to 0.125
         
-        # 2. Theme/subject match (30% weight)
-        themes = poem_analysis.get("themes", [])
-        theme_q_codes = []
-        
-        for theme in themes:
-            if theme.lower() in self.theme_mappings:
-                theme_q_codes.extend(self.theme_mappings[theme.lower()]["q_codes"])
-        
-        theme_matches = len(set(artwork_q_codes) & set(theme_q_codes))
-        if theme_matches > 0:
-            score += 0.3
-        
-        # 3. Genre alignment (20% weight)
+        # 4. Genre alignment (10% weight) - REDUCED FROM 20%
         emotional_tone = poem_analysis.get("emotional_tone", "unknown")
         visual_aesthetic = poem_analysis.get("visual_aesthetic", {})
         
@@ -464,11 +487,11 @@ class PoemAnalyzer:
         genre_matches = len(set(artwork_genres) & set(appropriate_genres))
         
         if genre_matches > 0:
-            score += 0.2
+            score += 0.1  # Reduced from 0.2 to 0.1
         elif artwork_genres:  # Has genres but not matching
-            score += 0.1  # Neutral genre
+            score += 0.05  # Reduced from 0.1 to 0.05
         
-        # 4. Intensity alignment (10% weight)
+        # 5. Intensity alignment (5% weight) - REDUCED FROM 10%
         poem_intensity = poem_analysis.get("intensity", 5)
         
         # Simple intensity scoring based on artwork complexity
@@ -482,7 +505,7 @@ class PoemAnalyzer:
         intensity_diff = abs(poem_intensity - normalized_complexity)
         intensity_score = max(0, (10 - intensity_diff) / 10)
         
-        score += intensity_score * 0.1
+        score += intensity_score * 0.05  # Reduced from 0.1 to 0.05
         
         # Check for avoid_subjects conflicts
         avoid_subjects = poem_analysis.get("avoid_subjects", [])
@@ -507,6 +530,234 @@ class PoemAnalyzer:
         else:
             # No era data available, return visual/thematic score only
             return min(score, 1.0)  # Cap at 1.0
+    
+    def _score_concrete_elements(self, poem_analysis: Dict, artwork_q_codes: List[str]) -> float:
+        """
+        Score concrete elements match between poem and artwork.
+        Returns score from 0.0 to 1.0 based on concrete element alignment.
+        
+        Args:
+            poem_analysis: Dictionary containing poem analysis results
+            artwork_q_codes: List of Q-codes associated with the artwork
+            
+        Returns:
+            Float score between 0.0 and 1.0
+        """
+        concrete_score = 0.0
+        
+        # 1. Score concrete objects (natural, man-made, living beings)
+        concrete_elements = poem_analysis.get("concrete_elements", {})
+        if concrete_elements:
+            # Get Q-codes for concrete objects mentioned in poem
+            poem_object_q_codes = []
+            
+            # Natural objects
+            natural_objects = concrete_elements.get("natural_objects", [])
+            for obj in natural_objects:
+                if obj.lower() in poem_themes.OBJECT_MAPPINGS:
+                    poem_object_q_codes.extend(poem_themes.OBJECT_MAPPINGS[obj.lower()]["q_codes"])
+            
+            # Man-made objects
+            man_made_objects = concrete_elements.get("man_made_objects", [])
+            for obj in man_made_objects:
+                if obj.lower() in poem_themes.OBJECT_MAPPINGS:
+                    poem_object_q_codes.extend(poem_themes.OBJECT_MAPPINGS[obj.lower()]["q_codes"])
+            
+            # Living beings
+            living_beings = concrete_elements.get("living_beings", [])
+            for obj in living_beings:
+                if obj.lower() in poem_themes.OBJECT_MAPPINGS:
+                    poem_object_q_codes.extend(poem_themes.OBJECT_MAPPINGS[obj.lower()]["q_codes"])
+            
+            # Calculate object matches
+            if poem_object_q_codes:
+                object_matches = len(set(artwork_q_codes) & set(poem_object_q_codes))
+                total_objects = len(set(poem_object_q_codes))
+                concrete_score += (object_matches / max(total_objects, 1)) * 0.4  # 40% of concrete score
+        
+        # 2. Score setting alignment
+        narrative_elements = poem_analysis.get("narrative_elements", {})
+        if narrative_elements:
+            poem_setting = narrative_elements.get("setting", "unknown")
+            
+            # Map settings to Q-codes
+            setting_mappings = {
+                "outdoor": ["Q7860", "Q191163"],  # nature, landscape
+                "indoor": ["Q134307", "Q16875712"],  # portrait, genre painting
+                "urban": ["Q515", "Q134307"],  # city, portrait
+                "rural": ["Q7860", "Q191163"],  # nature, landscape
+                "seascape": ["Q9430", "Q191163"],  # ocean, landscape
+                "celestial": ["Q183", "Q40446"],  # night, nocturne
+                "abstract": ["Q40446", "Q16875712"]  # nocturne, genre painting
+            }
+            
+            setting_q_codes = setting_mappings.get(poem_setting, [])
+            if setting_q_codes:
+                setting_matches = len(set(artwork_q_codes) & set(setting_q_codes))
+                if setting_matches > 0:
+                    concrete_score += 0.3  # 30% of concrete score
+        
+        # 3. Score spatial qualities alignment
+        spatial_qualities = poem_analysis.get("spatial_qualities", "unknown")
+        if spatial_qualities != "unknown":
+            # Map spatial qualities to artwork characteristics
+            spatial_mappings = {
+                "enclosed": ["Q134307", "Q16875712"],  # portrait, genre painting
+                "open": ["Q191163", "Q7860"],  # landscape, nature
+                "vertical": ["Q134307", "Q2839016"],  # portrait, religious painting
+                "horizontal": ["Q191163", "Q7860"],  # landscape, nature
+                "centered": ["Q134307", "Q16875712"],  # portrait, genre painting
+                "dispersed": ["Q191163", "Q7860"]  # landscape, nature
+            }
+            
+            spatial_q_codes = spatial_mappings.get(spatial_qualities, [])
+            if spatial_q_codes:
+                spatial_matches = len(set(artwork_q_codes) & set(spatial_q_codes))
+                if spatial_matches > 0:
+                    concrete_score += 0.2  # 20% of concrete score
+        
+        # 4. Score movement energy alignment
+        movement_energy = poem_analysis.get("movement_energy", "unknown")
+        if movement_energy != "unknown":
+            # Map movement energy to artwork characteristics
+            movement_mappings = {
+                "static": ["Q134307", "Q191163"],  # portrait, landscape
+                "flowing": ["Q191163", "Q7860"],  # landscape, nature
+                "explosive": ["Q16875712", "Q2839016"],  # genre painting, religious painting
+                "rhythmic": ["Q16875712", "Q1640824"],  # genre painting, floral painting
+                "stagnant": ["Q134307", "Q191163"]  # portrait, landscape
+            }
+            
+            movement_q_codes = movement_mappings.get(movement_energy, [])
+            if movement_q_codes:
+                movement_matches = len(set(artwork_q_codes) & set(movement_q_codes))
+                if movement_matches > 0:
+                    concrete_score += 0.1  # 10% of concrete score
+        
+        # 5. Add specificity bonuses for highly specific matches
+        specificity_bonus = self._calculate_specificity_bonus(poem_analysis, artwork_q_codes)
+        concrete_score += specificity_bonus
+        
+        return min(concrete_score, 1.0)  # Cap at 1.0
+    
+    def _calculate_specificity_bonus(self, poem_analysis: Dict, artwork_q_codes: List[str]) -> float:
+        """
+        Calculate specificity bonuses for highly specific matches.
+        Returns bonus score from 0.0 to 0.2 for specific matches.
+        
+        Args:
+            poem_analysis: Dictionary containing poem analysis results
+            artwork_q_codes: List of Q-codes associated with the artwork
+            
+        Returns:
+            Float bonus score between 0.0 and 0.2
+        """
+        bonus = 0.0
+        
+        # 1. Direct noun matches (highest specificity)
+        concrete_elements = poem_analysis.get("concrete_elements", {})
+        if concrete_elements:
+            poem_object_q_codes = []
+            
+            # Collect all concrete object Q-codes from poem
+            for category in ["natural_objects", "man_made_objects", "living_beings"]:
+                objects = concrete_elements.get(category, [])
+                for obj in objects:
+                    if obj.lower() in poem_themes.OBJECT_MAPPINGS:
+                        poem_object_q_codes.extend(poem_themes.OBJECT_MAPPINGS[obj.lower()]["q_codes"])
+            
+            # Calculate direct matches
+            if poem_object_q_codes:
+                direct_matches = len(set(artwork_q_codes) & set(poem_object_q_codes))
+                total_objects = len(set(poem_object_q_codes))
+                match_ratio = direct_matches / max(total_objects, 1)
+                
+                # High bonus for direct object matches
+                if match_ratio >= 0.5:  # 50% or more objects match
+                    bonus += 0.15  # Significant bonus
+                elif match_ratio >= 0.25:  # 25% or more objects match
+                    bonus += 0.1   # Moderate bonus
+                elif match_ratio > 0:  # Any objects match
+                    bonus += 0.05  # Small bonus
+        
+        # 2. Temporal alignment (time of day, season)
+        narrative_elements = poem_analysis.get("narrative_elements", {})
+        if narrative_elements:
+            poem_time = narrative_elements.get("time_of_day", "unknown")
+            poem_season = narrative_elements.get("season", "timeless")
+            
+            # Map temporal elements to Q-codes
+            temporal_mappings = {
+                "dawn": ["Q183", "Q40446"],  # night, nocturne (dawn is transitional)
+                "day": ["Q7860", "Q191163"],  # nature, landscape
+                "dusk": ["Q183", "Q40446"],  # night, nocturne
+                "night": ["Q183", "Q40446"], # night, nocturne
+                "spring": ["Q11427", "Q7860"], # flower, nature
+                "summer": ["Q7860", "Q191163"], # nature, landscape
+                "autumn": ["Q11427", "Q7860"], # flower, nature (autumn colors)
+                "winter": ["Q183", "Q40446"]  # night, nocturne (winter darkness)
+            }
+            
+            # Check time of day alignment
+            if poem_time != "unknown":
+                time_q_codes = temporal_mappings.get(poem_time, [])
+                if time_q_codes:
+                    time_matches = len(set(artwork_q_codes) & set(time_q_codes))
+                    if time_matches > 0:
+                        bonus += 0.05  # Temporal alignment bonus
+            
+            # Check season alignment
+            if poem_season != "timeless":
+                season_q_codes = temporal_mappings.get(poem_season, [])
+                if season_q_codes:
+                    season_matches = len(set(artwork_q_codes) & set(season_q_codes))
+                    if season_matches > 0:
+                        bonus += 0.05  # Seasonal alignment bonus
+        
+        # 3. Color alignment bonus
+        color_references = poem_analysis.get("color_references", [])
+        if color_references:
+            # Map colors to Q-codes (simplified mapping)
+            color_mappings = {
+                "red": ["Q11427", "Q16875712"],  # flower, genre painting
+                "blue": ["Q9430", "Q191163"],    # ocean, landscape
+                "green": ["Q7860", "Q191163"],   # nature, landscape
+                "yellow": ["Q11427", "Q7860"],   # flower, nature
+                "white": ["Q183", "Q40446"],     # night, nocturne
+                "black": ["Q183", "Q40446"],     # night, nocturne
+                "gold": ["Q11427", "Q16875712"], # flower, genre painting
+                "silver": ["Q183", "Q40446"]     # night, nocturne
+            }
+            
+            poem_color_q_codes = []
+            for color in color_references:
+                color_lower = color.lower()
+                if color_lower in color_mappings:
+                    poem_color_q_codes.extend(color_mappings[color_lower])
+            
+            if poem_color_q_codes:
+                color_matches = len(set(artwork_q_codes) & set(poem_color_q_codes))
+                if color_matches > 0:
+                    bonus += 0.03  # Color alignment bonus
+        
+        # 4. Human presence alignment
+        if narrative_elements:
+            human_presence = narrative_elements.get("human_presence", "absent")
+            
+            if human_presence in ["central", "peripheral"]:
+                # Artwork should have human subjects
+                human_q_codes = ["Q134307", "Q16875712"]  # portrait, genre painting
+                human_matches = len(set(artwork_q_codes) & set(human_q_codes))
+                if human_matches > 0:
+                    bonus += 0.02  # Human presence bonus
+            elif human_presence == "absent":
+                # Artwork should not have human subjects
+                non_human_q_codes = ["Q191163", "Q7860", "Q11427"]  # landscape, nature, flower
+                non_human_matches = len(set(artwork_q_codes) & set(non_human_q_codes))
+                if non_human_matches > 0:
+                    bonus += 0.02  # Absence of humans bonus
+        
+        return min(bonus, 0.2)  # Cap bonus at 0.2 (20% of total score)
 
 
 def main():

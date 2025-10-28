@@ -32,3 +32,4 @@ Thumbs.db
 # Test output files
 test_*.json.coverage
 .env
+.coverage

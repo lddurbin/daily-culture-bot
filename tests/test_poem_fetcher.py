@@ -756,10 +756,15 @@ class TestWikidataIntegration:
         assert result['birth_year'] == 1770
         assert result['death_year'] == 1850
     
-    @pytest.mark.slow
-    @pytest.mark.integration
-    def test_get_poet_dates_unknown_poet_real(self):
+    @patch('src.poem_fetcher.requests.Session.get')
+    def test_get_poet_dates_unknown_poet_real(self, mock_get):
         """Test handling of unknown poet with real Wikidata."""
+        # Mock empty response to simulate unknown poet
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"results": {"bindings": []}}
+        mock_get.return_value = mock_response
+        
         result = self.fetcher.get_poet_dates("Nonexistent Poet XYZ123")
         
         # Should return None for unknown poets

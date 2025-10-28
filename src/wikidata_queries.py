@@ -154,6 +154,119 @@ class WikidataQueries:
                     print(f"❌ Error querying Wikidata for subjects after {max_retries} attempts: {e}")
                     return []
     
+    def query_artwork_by_direct_depicts(self, q_codes: List[str], limit: int = 50, 
+                                       offset: int = 0, random_order: bool = True, 
+                                       genres: List[str] = None, max_sitelinks: int = 20, 
+                                       artwork_types: List[str] = None) -> List[Dict]:
+        """
+        Query Wikidata for artwork that directly depicts specific objects (P180 property).
+        This is more targeted than query_artwork_by_subject() and prioritizes direct matches.
+        
+        Args:
+            q_codes: List of Wikidata Q-codes for objects that must be directly depicted
+            limit: Number of results to return
+            offset: Offset for pagination
+            random_order: Whether to randomize the order of results
+            genres: List of genre Q-codes to filter by
+            max_sitelinks: Maximum number of Wikipedia sitelinks (fame filter)
+            artwork_types: List of artwork type Q-codes to filter by
+            
+        Returns:
+            List of raw Wikidata results with direct depicts matches
+        """
+        if not q_codes:
+            return []
+        
+        # Check cache first
+        cache_key = self._get_cache_key("artwork_by_direct_depicts", 
+                                      q_codes=q_codes, limit=limit, offset=offset, 
+                                      max_sitelinks=max_sitelinks, artwork_types=artwork_types)
+        
+        if cache_key in self.query_cache:
+            print("📋 Using cached direct depicts query result")
+            return self.query_cache[cache_key]
+        
+        # Limit Q-codes to prevent overly complex queries
+        if len(q_codes) > 8:
+            print(f"⚠️ Too many Q-codes ({len(q_codes)}), limiting to first 8 for performance")
+            q_codes = q_codes[:8]
+        
+        # Default artwork types if not specified
+        if artwork_types is None:
+            artwork_types = [
+                "Q3305213",  # painting
+                "Q125191",   # photograph
+                "Q860861",   # sculpture
+            ]
+        
+        # Create Q-code filter clause
+        q_code_list = ', '.join([f'wd:{q_code}' for q_code in q_codes])
+        artwork_type_list = ', '.join([f'wd:{art_type}' for art_type in artwork_types])
+        
+        # Build genre filter if specified
+        genre_filter = ""
+        if genres:
+            genre_list = ', '.join([f'wd:{genre}' for genre in genres])
+            genre_filter = f"""
+            ?artwork wdt:P136 ?genre .
+            FILTER(?genre IN ({genre_list}))
+            """
+        
+        # SPARQL query optimized for direct depicts matching
+        sparql_query = f"""
+        SELECT ?artwork ?image ?sitelinks ?subject ?genre ?artworkType WHERE {{
+          ?artwork wdt:P31 ?artworkType .
+          FILTER(?artworkType IN ({artwork_type_list}))
+          
+          ?artwork wdt:P18 ?image .
+          ?artwork wikibase:sitelinks ?sitelinks .
+          FILTER(?sitelinks < {max_sitelinks})
+          
+          # Direct depicts matching (P180) - this is the key difference
+          ?artwork wdt:P180 ?subject .
+          FILTER(?subject IN ({q_code_list}))
+          
+          # Optional genre filtering
+          {genre_filter}
+        }}
+        ORDER BY RAND()
+        LIMIT {limit}
+        OFFSET {offset}
+        """
+        
+        # Use longer timeout for complex queries
+        timeout = self.query_timeout if len(q_codes) > 5 else min(30, self.query_timeout)
+        max_retries = 2
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(
+                    self.wikidata_endpoint,
+                    params={'query': sparql_query, 'format': 'json'},
+                    timeout=timeout
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                results = data['results']['bindings']
+                
+                # Cache the results
+                self.query_cache[cache_key] = results
+                self._manage_cache_size()
+                
+                print(f"🎯 Found {len(results)} artworks with direct depicts matches")
+                return results
+                
+            except requests.RequestException as e:
+                if attempt < max_retries - 1:
+                    delay = 2 ** attempt  # Exponential backoff
+                    print(f"⚠️ Direct depicts query attempt {attempt + 1} failed: {e}")
+                    print(f"🔄 Retrying in {delay} seconds...")
+                    time.sleep(delay)
+                else:
+                    print(f"❌ Error querying Wikidata for direct depicts after {max_retries} attempts: {e}")
+                    return []
+    
     def query_wikidata_paintings(self, limit: int = 50, offset: int = 0, 
                                 filter_type: str = "both", random_order: bool = False, 
                                 max_sitelinks: int = 20) -> List[Dict]:

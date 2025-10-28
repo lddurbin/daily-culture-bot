@@ -6,3 +6,4 @@ poetpy
 python-dotenv
 openai>=1.0.0
 Pillow>=10.0.0
+spacy>=3.7.0
