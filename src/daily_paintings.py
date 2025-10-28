@@ -496,8 +496,7 @@ def main():
                 email_format=args.email_format,
                 match_status=match_status,
                 poem_analyses=poem_analyses,
-                image_paths=email_image_paths,
-                match_explanations=match_explanations if args.complementary else None
+                image_paths=email_image_paths
             )
             
             if success:
