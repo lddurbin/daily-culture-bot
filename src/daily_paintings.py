@@ -268,49 +268,55 @@ def main():
                         # Second pass: AI-driven selection from candidates
                         print("🤖 Second pass: AI-driven candidate selection...")
                         
-                        # Import OpenAI analyzer for second pass
-                        try:
+                        # Check if OpenAI client is available
+                        if not poem_analyzer_instance.openai_client:
+                            print("⚠️ AI selection failed: OpenAI client not initialized")
+                            print("🔄 Fallback: Using top scored candidates")
+                            paintings = [painting for painting, score in scored_candidates[:args.count]]
+                            match_status = ["scored"] * len(paintings)
+                        else:
+                            # Import OpenAI analyzer for second pass
                             try:
-                                from . import openai_analyzer
-                            except ImportError:
-                                import openai_analyzer
-                            openai_analyzer_instance = openai_analyzer.OpenAIAnalyzer(
-                                creator.openai_client if hasattr(creator, 'openai_client') else None,
-                                poem_analyzer_instance.theme_mappings,
-                                poem_analyzer_instance.emotion_mappings
-                            )
-                            
-                            # Extract candidate artworks (without scores for AI selection)
-                            candidate_artworks = [painting for painting, score in scored_candidates]
-                            
-                            # Use AI to select best matches
-                            ai_selections = openai_analyzer_instance.select_best_artwork_matches(
-                                poem=poems[0],
-                                candidates=candidate_artworks,
-                                count=args.count
-                            )
-                            
-                            if ai_selections:
-                                paintings = [artwork for artwork, reasoning in ai_selections]
-                                match_status = ["ai_selected"] * len(paintings)
-                                print(f"✅ Second pass: AI selected {len(paintings)} best matches")
-                                
-                                # Display AI reasoning
-                                for i, (artwork, reasoning) in enumerate(ai_selections):
-                                    print(f"   {i+1}. {artwork['title']} by {artwork['artist']}")
-                                    print(f"      AI reasoning: {reasoning}")
-                            else:
+                                try:
+                                    from . import openai_analyzer
+                                except ImportError:
+                                    import openai_analyzer
+                                openai_analyzer_instance = openai_analyzer.OpenAIAnalyzer(
+                                    poem_analyzer_instance.openai_client,
+                                    poem_analyzer_instance.theme_mappings,
+                                    poem_analyzer_instance.emotion_mappings
+                                )
+                            except Exception as e:
+                                print(f"⚠️ OpenAI analyzer import failed: {e}")
                                 # Fallback to top scored candidates
                                 paintings = [painting for painting, score in scored_candidates[:args.count]]
                                 match_status = ["scored"] * len(paintings)
-                                print(f"⚠️ AI selection failed, using top scored candidates")
-                            
-                        except Exception as e:
-                            print(f"⚠️ AI selection failed: {e}")
-                            # Fallback to top scored candidates
-                            paintings = [painting for painting, score in scored_candidates[:args.count]]
-                            match_status = ["scored"] * len(paintings)
-                            print(f"🔄 Fallback: Using top {len(paintings)} scored candidates")
+                                print(f"🔄 Fallback: Using top {len(paintings)} scored candidates")
+                            else:
+                                # Extract candidate artworks (without scores for AI selection)
+                                candidate_artworks = [painting for painting, score in scored_candidates]
+                                
+                                # Use AI to select best matches
+                                ai_selections = openai_analyzer_instance.select_best_artwork_matches(
+                                    poem=poems[0],
+                                    candidates=candidate_artworks,
+                                    count=args.count
+                                )
+                                
+                                if ai_selections:
+                                    paintings = [artwork for artwork, reasoning in ai_selections]
+                                    match_status = ["ai_selected"] * len(paintings)
+                                    print(f"✅ Second pass: AI selected {len(paintings)} best matches")
+                                    
+                                    # Display AI reasoning
+                                    for i, (artwork, reasoning) in enumerate(ai_selections):
+                                        print(f"   {i+1}. {artwork['title']} by {artwork['artist']}")
+                                        print(f"      AI reasoning: {reasoning}")
+                                else:
+                                    # Fallback to top scored candidates
+                                    paintings = [painting for painting, score in scored_candidates[:args.count]]
+                                    match_status = ["scored"] * len(paintings)
+                                    print(f"⚠️ AI selection failed, using top scored candidates")
                     else:
                         # Single-pass: Use top scored candidates directly
                         paintings = [painting for painting, score in scored_candidates[:args.count]]
