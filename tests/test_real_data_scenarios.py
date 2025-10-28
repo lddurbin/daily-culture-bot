@@ -43,7 +43,8 @@ class TestRealDataScenarios:
                 # Verify explanation structure
                 assert isinstance(explanation, dict)
                 assert 'match_score' in explanation
-                assert explanation['match_score'] == score
+                # Use approximate equality due to floating point precision
+                assert abs(explanation['match_score'] - score) < 1e-9
                 
                 # Should handle real data structures gracefully
                 assert isinstance(explanation.get('why_matched', ''), str)
@@ -77,7 +78,8 @@ class TestRealDataScenarios:
                 # Should handle nested lists gracefully
                 assert isinstance(explanation, dict)
                 assert 'match_score' in explanation
-                assert explanation['match_score'] == score
+                # Use approximate equality due to floating point precision
+                assert abs(explanation['match_score'] - score) < 1e-9
                 
                 # Verify nested structures are handled
                 assert isinstance(explanation.get('why_matched', ''), str)
@@ -188,7 +190,8 @@ class TestRealDataScenarios:
             explanation = explainer.explain_match(poem_analysis, artwork, score)
             assert isinstance(explanation, dict)
             assert 'match_score' in explanation
-            assert explanation['match_score'] == score
+            # Use approximate equality due to floating point precision
+            assert abs(explanation['match_score'] - score) < 1e-9
             
             # Should not crash with nested lists
             assert isinstance(explanation.get('why_matched', ''), str)
@@ -305,7 +308,8 @@ class TestRealDataScenarios:
             
             # Data should flow correctly between modules
             assert 0.0 <= score <= 1.0
-            assert explanation['match_score'] == score
+            # Use approximate equality due to floating point precision
+            assert abs(explanation['match_score'] - score) < 1e-9
             
         except ImportError as e:
             pytest.skip(f"Required module not available: {e}")
