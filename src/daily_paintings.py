@@ -268,14 +268,21 @@ def main():
                         # Second pass: AI-driven selection from candidates
                         print("🤖 Second pass: AI-driven candidate selection...")
                         
-                        # Import OpenAI analyzer for second pass
-                        try:
+                        # Check if OpenAI client is available
+                        if not poem_analyzer_instance.openai_client:
+                            print("⚠️ AI selection failed: OpenAI client not initialized")
+                            print("🔄 Fallback: Using top scored candidates")
+                            paintings = [painting for painting, score in scored_candidates[:args.count]]
+                            match_status = ["scored"] * len(paintings)
+                        else:
+                            # Import OpenAI analyzer for second pass
                             try:
-                                from . import openai_analyzer
-                            except ImportError:
-                                import openai_analyzer
+                                try:
+                                    from . import openai_analyzer
+                                except ImportError:
+                                    import openai_analyzer
                             openai_analyzer_instance = openai_analyzer.OpenAIAnalyzer(
-                                creator.openai_client if hasattr(creator, 'openai_client') else None,
+                                poem_analyzer_instance.openai_client,
                                 poem_analyzer_instance.theme_mappings,
                                 poem_analyzer_instance.emotion_mappings
                             )
