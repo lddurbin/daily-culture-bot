@@ -54,8 +54,8 @@ def parse_arguments():
                        help='Disable GPT-4 Vision analysis for artwork images')
     parser.add_argument('--no-multi-pass', action='store_true',
                        help='Disable multi-pass analysis (skip AI-driven candidate selection)')
-    parser.add_argument('--candidate-count', type=int, default=20,
-                       help='Number of candidate artworks to fetch for multi-pass analysis (default: 20)')
+    parser.add_argument('--candidate-count', type=int, default=6,
+                       help='Number of candidate artworks to fetch for multi-pass analysis (default: 6)')
     parser.add_argument('--explain-matches', action='store_true',
                        help='Generate detailed explanations for artwork-poem matches')
     

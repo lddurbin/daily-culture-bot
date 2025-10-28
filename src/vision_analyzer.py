@@ -40,8 +40,9 @@ class VisionAnalyzer:
                 print("❌ OPENAI_API_KEY not found for vision analysis")
                 self.openai_client = None
         
-        # Cache for analysis results to avoid redundant API calls
+        # Enhanced cache for analysis results to avoid redundant API calls
         self.analysis_cache = {}
+        self.cache_stats = {"hits": 0, "misses": 0, "total_requests": 0}
     
     def analyze_artwork_image(self, image_url: str, artwork_title: str = "") -> Dict:
         """
@@ -63,9 +64,14 @@ class VisionAnalyzer:
         
         # Check cache first
         cache_key = f"{image_url}_{artwork_title}"
+        self.cache_stats["total_requests"] += 1
+        
         if cache_key in self.analysis_cache:
-            print(f"📋 Using cached vision analysis for: {artwork_title}")
+            self.cache_stats["hits"] += 1
+            print(f"📋 Using cached vision analysis for: {artwork_title} (cache hit)")
             return self.analysis_cache[cache_key]
+        
+        self.cache_stats["misses"] += 1
         
         prompt = """Analyze this artwork and return ONLY a JSON object:
 {
@@ -250,6 +256,39 @@ Return ONLY valid JSON with no additional text."""
         """Clear the analysis cache."""
         self.analysis_cache.clear()
         print("🗑️ Vision analysis cache cleared")
+    
+    def should_skip_vision_analysis(self, artwork: Dict) -> bool:
+        """
+        Determine if vision analysis should be skipped for an artwork with good metadata.
+        
+        Args:
+            artwork: Dictionary containing artwork data
+            
+        Returns:
+            True if vision analysis should be skipped, False otherwise
+        """
+        # Skip if artwork has comprehensive subject information
+        subject_q_codes = artwork.get('subject_q_codes', [])
+        if len(subject_q_codes) >= 3:  # Has 3+ subject codes
+            return True
+        
+        # Skip if artwork has detailed genre information
+        genre_q_codes = artwork.get('genre_q_codes', [])
+        if len(genre_q_codes) >= 2:  # Has 2+ genre codes
+            return True
+        
+        # Skip if artwork has comprehensive depicts information
+        depicts = artwork.get('depicts', [])
+        if len(depicts) >= 3:  # Has 3+ depicts entries
+            return True
+        
+        # Skip if artwork has detailed style/medium information
+        style = artwork.get('style', '')
+        medium = artwork.get('medium', '')
+        if style and medium and len(style) > 10 and len(medium) > 10:
+            return True
+        
+        return False
     
     def is_enabled(self) -> bool:
         """Check if vision analysis is enabled (has OpenAI client)."""
