@@ -187,7 +187,32 @@ def main():
         
         # Combine all Q-codes
         all_q_codes.extend(emotion_q_codes)
-        all_q_codes = list(set(all_q_codes))  # Remove duplicates
+        # Fallback: derive Q-codes from concrete elements and subject suggestions if still empty
+        if not all_q_codes and poem_analyses:
+            try:
+                try:
+                    from . import poem_themes as _pt
+                except ImportError:
+                    import poem_themes as _pt
+                object_map = getattr(_pt, "OBJECT_MAPPINGS", {})
+                concrete = poem_analyses[0].get("concrete_elements", {}) or {}
+                suggestions = poem_analyses[0].get("subject_suggestions", []) or []
+                derived = []
+                for cat in ("natural_objects", "man_made_objects", "living_beings", "abstract_concepts"):
+                    for term in concrete.get(cat, []) or []:
+                        if isinstance(term, str) and term.lower() in object_map:
+                            derived.extend(object_map[term.lower()]["q_codes"])
+                for term in suggestions:
+                    if isinstance(term, str):
+                        key = term.lower().strip()
+                        if key in object_map:
+                            derived.extend(object_map[key]["q_codes"])
+                if derived:
+                    all_q_codes.extend(derived)
+            except Exception:
+                pass
+        # De-duplicate
+        all_q_codes = list(set(all_q_codes))
         emotion_genres = list(set(emotion_genres))  # Remove duplicates
         
         # Print analysis results
@@ -374,7 +399,7 @@ def main():
                     paintings = creator.fetch_paintings(count=args.count, max_sitelinks=args.max_fame_level)
                     match_status = ["fallback"] * len(paintings)
         else:
-            print("⚠️ No themes or emotions detected in poems, using random obscure artwork")
+            print("⚠️ No Q-codes derived from analysis; using random obscure artwork")
             if args.fast:
                 paintings = creator.create_sample_paintings(args.count)
                 match_status = ["sample"] * len(paintings)

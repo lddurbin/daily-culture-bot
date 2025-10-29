@@ -1330,6 +1330,19 @@ class TestBirthdayPoemQCodeGeneration:
             irrelevant_codes = ["Q183", "Q4", "Q18811"]  # night, death, battle
             for code in irrelevant_codes:
                 assert code not in q_codes, f"Unexpected Q-code {code} found in {q_codes}"
+
+
+def test_analyzer_derives_additional_qcodes_with_normalization():
+    analyzer = poem_analyzer.PoemAnalyzer()
+    analysis = {
+        'concrete_elements': {
+            'man_made_objects': ['loaves'],
+        },
+        'subject_suggestions': ['banquet']
+    }
+    extra = analyzer.derive_additional_q_codes(analysis)
+    assert any(q in extra for q in ['Q11446'])
+    assert any(q in extra for q in ['Q16875712'])
     
     def test_q_code_priority_concrete_over_abstract(self):
         """Test that concrete noun Q-codes are prioritized over abstract theme Q-codes."""

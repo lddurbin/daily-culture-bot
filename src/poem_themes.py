@@ -97,6 +97,19 @@ THEME_MAPPINGS = {
         ],
         "q_codes": ["Q395", "Q12133", "Q23397"]  # building, light, landscape
     }
+    ,
+    "miracle": {
+        "keywords": [
+            "miracle", "miraculous", "wonders", "wonder", "sign", "signs"
+        ],
+        "q_codes": ["Q2839016", "Q16875712"]  # religious painting, genre painting
+    },
+    "abundance": {
+        "keywords": [
+            "abundance", "plenty", "bounty", "fullness", "overflowing"
+        ],
+        "q_codes": ["Q16875712"]  # genre painting
+    }
 }
 
 # Emotion-aware mappings for better artwork matching
@@ -140,6 +153,22 @@ EMOTION_MAPPINGS = {
         "q_codes": ["Q23397", "Q35127", "Q395"],  # landscape, solitude, building
         "genres": ["Q191163", "Q134307"],  # landscape, portrait
         "keywords": ["memory", "past", "old", "remember", "childhood", "home", "familiar"]
+    }
+    ,
+    "awe": {
+        "q_codes": ["Q2839016", "Q16875712"],  # religious painting, genre painting
+        "genres": ["Q2839016", "Q16875712"],
+        "keywords": ["awe", "wonder", "astonishment", "reverence"]
+    },
+    "gratitude": {
+        "q_codes": ["Q16875712"],  # genre painting
+        "genres": ["Q16875712"],
+        "keywords": ["gratitude", "thankful", "thanks", "appreciation"]
+    },
+    "contentment": {
+        "q_codes": ["Q16875712", "Q1640824"],  # genre painting, floral painting
+        "genres": ["Q16875712", "Q1640824"],
+        "keywords": ["contentment", "content", "satisfied", "at peace"]
     }
 }
 
@@ -213,6 +242,13 @@ OBJECT_MAPPINGS = {
     "book": {"q_codes": ["Q571"], "keywords": ["book", "books", "volume", "tome"]},
     "books": {"q_codes": ["Q571"], "keywords": ["book", "books", "volume", "tome"]},
     "table": {"q_codes": ["Q11446"], "keywords": ["table", "tables", "desk", "surface"]},
+    # Food and feast context (for loaves and fishes, harvest, feast)
+    "bread": {"q_codes": ["Q11446"], "keywords": ["bread", "loaf", "loaves"]},
+    "loaf": {"q_codes": ["Q11446"], "keywords": ["loaf", "loaves", "bread"]},
+    "loaves": {"q_codes": ["Q11446"], "keywords": ["loaf", "loaves", "bread"]},
+    "feast": {"q_codes": ["Q16875712"], "keywords": ["feast", "banquet", "banqueting"]},
+    "banquet": {"q_codes": ["Q16875712"], "keywords": ["banquet", "feast"]},
+    "harvest": {"q_codes": ["Q23397"], "keywords": ["harvest", "reaping", "sheaves"]},
     "tables": {"q_codes": ["Q11446"], "keywords": ["table", "tables", "desk", "surface"]},
     "chair": {"q_codes": ["Q11446"], "keywords": ["chair", "chairs", "seat", "seats"]},
     "chairs": {"q_codes": ["Q11446"], "keywords": ["chair", "chairs", "seat", "seats"]},
