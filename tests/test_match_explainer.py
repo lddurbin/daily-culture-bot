@@ -563,5 +563,138 @@ class TestMatchExplainerEdgeCases:
         assert explanation['match_score'] == score
 
 
+class TestExplanationDataUsage:
+    """Test that explanations use actual analysis data instead of generic templates."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.explainer = MatchExplainer()
+    
+    def test_explanation_uses_vision_analysis_data(self):
+        """Test that explanation uses actual vision analysis data."""
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "emotional_tone": "celebratory",
+            "themes": ["friendship", "celebration"],
+            "concrete_elements": {
+                "living_beings": ["friend"],
+                "abstract_concepts": ["pleasure", "joy"]
+            },
+            "narrative_elements": {
+                "setting": "indoor",
+                "human_presence": "central"
+            }
+        }
+        
+        artwork = {
+            "title": "Portrait of Friends",
+            "subject_q_codes": ["Q5", "Q134307"],  # human, portrait
+            "genre_q_codes": ["Q16875712"]  # genre painting
+        }
+        
+        # Mock vision analysis with specific detected objects
+        vision_analysis = {
+            "success": True,
+            "analysis": {
+                "detected_objects": ["person", "smile", "celebration"],
+                "setting": "indoor",
+                "mood": "joyful",
+                "dominant_colors": ["warm", "bright"]
+            }
+        }
+        
+        score = 0.7
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score, vision_analysis)
+        
+        # Should use actual vision data, not generic templates
+        why_matched = explanation.get("why_matched", "")
+        
+        # Should NOT contain generic template text
+        generic_phrases = [
+            "both address themes of mortality, loss, and remembrance",
+            "thematic alignment",
+            "emotional alignment"
+        ]
+        
+        for phrase in generic_phrases:
+            assert phrase not in why_matched.lower(), f"Explanation should not contain generic phrase: {phrase}"
+        
+        # Should contain specific data from vision analysis
+        specific_elements = ["person", "smile", "celebration", "indoor", "joyful"]
+        found_specific = any(element in why_matched.lower() for element in specific_elements)
+        assert found_specific, f"Explanation should contain specific vision analysis data. Got: {why_matched}"
+    
+    def test_explanation_uses_poem_concrete_elements(self):
+        """Test that explanation uses actual poem concrete elements."""
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "themes": ["friendship"],
+            "concrete_elements": {
+                "living_beings": ["friend"],
+                "abstract_concepts": ["pleasure", "wishes"]
+            },
+            "narrative_elements": {
+                "setting": "indoor",
+                "human_presence": "central"
+            }
+        }
+        
+        artwork = {
+            "title": "Birthday Celebration",
+            "subject_q_codes": ["Q5", "Q2811"],  # human, birthday
+            "genre_q_codes": ["Q16875712"]
+        }
+        
+        score = 0.8
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        # Should reference specific concrete elements from poem or use specific data
+        why_matched = explanation.get("why_matched", "")
+        concrete_elements = ["friend", "pleasure", "wishes", "birthday", "celebration"]
+        
+        # Check if explanation uses concrete elements OR specific data (not generic)
+        found_concrete = any(element in why_matched.lower() for element in concrete_elements)
+        uses_specific_data = any(phrase in why_matched.lower() for phrase in [
+            "shared elements", "indoor settings", "both feature", "both convey"
+        ])
+        
+        assert found_concrete or uses_specific_data, f"Explanation should reference concrete elements or use specific data. Got: {why_matched}"
+    
+    def test_explanation_avoids_generic_templates(self):
+        """Test that explanation avoids generic template fallbacks."""
+        poem_analysis = {
+            "primary_emotions": ["joy"],
+            "themes": ["celebration"],
+            "concrete_elements": {
+                "living_beings": ["friend"],
+                "abstract_concepts": ["pleasure"]
+            }
+        }
+        
+        artwork = {
+            "title": "Generic Artwork",
+            "subject_q_codes": ["Q5"],
+            "genre_q_codes": ["Q134307"]
+        }
+        
+        score = 0.3
+        explanation = self.explainer.explain_match(poem_analysis, artwork, score)
+        
+        # Should not fall back to generic templates
+        why_matched = explanation.get("why_matched", "")
+        
+        # Generic template indicators to avoid
+        generic_indicators = [
+            "both address themes of",
+            "thematic and emotional alignment",
+            "weak match because both",
+            "moderate match based on"
+        ]
+        
+        # Should not contain multiple generic indicators
+        generic_count = sum(1 for indicator in generic_indicators if indicator in why_matched.lower())
+        assert generic_count <= 1, f"Explanation should avoid generic templates. Got: {why_matched}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

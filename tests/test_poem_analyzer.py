@@ -1246,6 +1246,123 @@ class TestPoemAnalysisEdgeCases:
         """Test handling of special characters in analysis results."""
         # Skip this test as it requires OpenAI API which is not always available
         pytest.skip("Skipping OpenAI-dependent edge case test")
+
+
+class TestBirthdayPoemQCodeGeneration:
+    """Test Q-code generation for birthday poem concrete nouns."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.analyzer = poem_analyzer.PoemAnalyzer()
+    
+    def test_birthday_poem_concrete_nouns(self):
+        """Test that birthday poem concrete nouns generate appropriate Q-codes."""
+        # This is the exact poem from the console output
+        birthday_poem = {
+            "title": "To Mrs M. B. on Her Birthday.",
+            "text": "Oh, be thou blest with all that Heaven can send,\nLong health, long youth, long pleasure, and a friend;\nLong may thy tender eyes with pleasure shine,\nAnd long may Heaven preserve thee, friend of mine."
+        }
+        
+        # Mock OpenAI client and analyzer
+        with patch.object(self.analyzer, 'openai_client') as mock_client, \
+             patch.object(self.analyzer, 'openai_analyzer') as mock_analyzer:
+            
+            # Set up the mock client
+            mock_response = Mock()
+            mock_response.choices = [Mock(message=Mock(content=json.dumps({
+                "primary_emotions": ["joy", "reflection"],
+                "secondary_emotions": ["contentment"],
+                "emotional_tone": "celebratory",
+                "themes": ["friendship", "celebration", "birthday"],
+                "concrete_elements": {
+                    "natural_objects": [],
+                    "man_made_objects": [],
+                    "living_beings": ["friend"],
+                    "abstract_concepts": ["wishes", "pleasure", "health", "youth"]
+                },
+                "narrative_elements": {
+                    "setting": "indoor",
+                    "time_of_day": "day",
+                    "human_presence": "central"
+                },
+                "visual_aesthetic": {"mood": "light"},
+                "intensity": 6,
+                "avoid_subjects": ["loneliness", "conflict", "hardship"]
+            })))]
+            mock_client.chat.completions.create.return_value = mock_response
+            
+            # Mock the analyzer instance
+            mock_analyzer_instance = Mock()
+            mock_analyzer_instance.analyze_poem_with_ai.return_value = {
+                "primary_emotions": ["joy", "reflection"],
+                "secondary_emotions": ["contentment"],
+                "emotional_tone": "celebratory",
+                "themes": ["friendship", "celebration", "birthday"],
+                "concrete_elements": {
+                    "natural_objects": [],
+                    "man_made_objects": [],
+                    "living_beings": ["friend"],
+                    "abstract_concepts": ["wishes", "pleasure", "health", "youth"]
+                },
+                "narrative_elements": {
+                    "setting": "indoor",
+                    "time_of_day": "day",
+                    "human_presence": "central"
+                },
+                "visual_aesthetic": {"mood": "light"},
+                "intensity": 6,
+                "avoid_subjects": ["loneliness", "conflict", "hardship"],
+                "q_codes": ["Q2385804", "Q17297777", "Q5", "Q2811"]  # Expected concrete Q-codes
+            }
+            self.analyzer.openai_analyzer = mock_analyzer_instance
+            
+            analysis = self.analyzer.analyze_poem(birthday_poem)
+            
+            # Should prioritize concrete nouns over abstract themes
+            q_codes = analysis.get("q_codes", [])
+            
+            # Should include celebration/friendship Q-codes
+            expected_concrete_codes = ["Q2385804", "Q17297777", "Q5", "Q2811"]  # celebration, friendship, human, birthday
+            for code in expected_concrete_codes:
+                assert code in q_codes, f"Expected Q-code {code} not found in {q_codes}"
+            
+            # Should NOT include irrelevant abstract codes
+            irrelevant_codes = ["Q183", "Q4", "Q18811"]  # night, death, battle
+            for code in irrelevant_codes:
+                assert code not in q_codes, f"Unexpected Q-code {code} found in {q_codes}"
+    
+    def test_q_code_priority_concrete_over_abstract(self):
+        """Test that concrete noun Q-codes are prioritized over abstract theme Q-codes."""
+        poem = {
+            "title": "Test Poem",
+            "text": "My friend celebrates with joy and pleasure on this special day."
+        }
+        
+        with patch.object(self.analyzer, 'openai_client') as mock_client:
+            mock_response = Mock()
+            mock_response.choices = [Mock(message=Mock(content=json.dumps({
+                "primary_emotions": ["joy"],
+                "themes": ["death", "war"],  # Abstract themes
+                "concrete_elements": {
+                    "living_beings": ["friend"],
+                    "abstract_concepts": ["pleasure", "joy"]
+                }
+            })))]
+            mock_client.chat.completions.create.return_value = mock_response
+            
+            analysis = self.analyzer.analyze_poem(poem)
+            q_codes = analysis.get("q_codes", [])
+            
+            # Should have concrete codes first
+            concrete_codes = ["Q5", "Q2385804"]  # human, celebration
+            abstract_codes = ["Q4", "Q198"]  # death, war
+            
+            # Check that concrete codes appear before abstract codes in the list
+            concrete_positions = [q_codes.index(code) for code in concrete_codes if code in q_codes]
+            abstract_positions = [q_codes.index(code) for code in abstract_codes if code in q_codes]
+            
+            if concrete_positions and abstract_positions:
+                assert min(concrete_positions) < min(abstract_positions), "Concrete codes should appear before abstract codes"
     
     def test_unicode_in_analysis(self):
         """Test handling of unicode characters in analysis results."""

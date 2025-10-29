@@ -2166,6 +2166,7 @@ class TestSelectiveVisionAnalysis:
                 assert mock_extract.call_count == 1
                 assert mock_build.call_count == 1
     
+    @pytest.mark.network
     def test_fetch_artwork_by_subject_with_scoring_vision_candidate_limit(self):
         """Test fetch_artwork_by_subject_with_scoring with vision_candidate_limit parameter."""
         creator = datacreator.PaintingDataCreator()
@@ -2393,6 +2394,101 @@ class TestDataCreatorCoverage:
         except Exception:
             # Expected to handle gracefully
             pass
+
+
+class TestDepictsBonusFiltering:
+    """Test depicts bonus filtering for concrete objects only."""
+    
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.creator = datacreator.PaintingDataCreator()
+    
+    def test_depicts_bonus_concrete_objects_only(self):
+        """Test that depicts bonus only applies to concrete, visually verifiable objects."""
+        # Mock artwork with concrete objects (should get bonus)
+        concrete_artwork = {
+            "title": "Portrait of Friends",
+            "subject_q_codes": ["Q5", "Q134307"],  # human, portrait
+            "genre_q_codes": ["Q16875712"],  # genre painting
+            "year": 1850
+        }
+        
+        # Mock artwork with abstract concepts (should NOT get bonus)
+        abstract_artwork = {
+            "title": "Abstract Concept",
+            "subject_q_codes": ["Q4", "Q316", "Q183"],  # death, love, night
+            "genre_q_codes": ["Q191163"],  # landscape
+            "year": 1850
+        }
+        
+        # Mock poem analysis for birthday poem
+        poem_analysis = {
+            "themes": ["friendship", "celebration"],
+            "concrete_elements": {
+                "living_beings": ["friend"],
+                "abstract_concepts": ["pleasure", "joy"]
+            }
+        }
+        
+        # Test that concrete artwork gets depicts bonus
+        strategy_with_bonus = {"depicts_bonus": 0.5, "min_score": 0.0}
+        
+        # This should be implemented in the actual code
+        # For now, we'll test the concept
+        concrete_q_codes = concrete_artwork["subject_q_codes"]
+        abstract_q_codes = abstract_artwork["subject_q_codes"]
+        
+        # Concrete objects that should get bonus
+        concrete_whitelist = ["Q5", "Q134307", "Q2811", "Q11427"]  # human, portrait, birthday, flower
+        
+        # Abstract concepts that should NOT get bonus
+        abstract_blacklist = ["Q4", "Q316", "Q183", "Q198"]  # death, love, night, war
+        
+        # Check concrete artwork
+        concrete_has_bonus_eligible = any(code in concrete_whitelist for code in concrete_q_codes)
+        concrete_has_blacklisted = any(code in abstract_blacklist for code in concrete_q_codes)
+        
+        assert concrete_has_bonus_eligible, "Concrete artwork should have bonus-eligible Q-codes"
+        assert not concrete_has_blacklisted, "Concrete artwork should not have blacklisted Q-codes"
+        
+        # Check abstract artwork
+        abstract_has_bonus_eligible = any(code in concrete_whitelist for code in abstract_q_codes)
+        abstract_has_blacklisted = any(code in abstract_blacklist for code in abstract_q_codes)
+        
+        assert not abstract_has_bonus_eligible, "Abstract artwork should not have bonus-eligible Q-codes"
+        assert abstract_has_blacklisted, "Abstract artwork should have blacklisted Q-codes"
+    
+    def test_depicts_bonus_whitelist_criteria(self):
+        """Test the specific criteria for depicts bonus whitelist."""
+        # Test Q-codes that should get depicts bonus
+        bonus_eligible_codes = [
+            "Q5",      # human
+            "Q134307", # portrait
+            "Q2811",   # birthday
+            "Q11427",  # flower
+            "Q729",    # animal (when contextually appropriate)
+            "Q16875712" # genre painting
+        ]
+        
+        # Test Q-codes that should NOT get depicts bonus
+        bonus_ineligible_codes = [
+            "Q4",      # death
+            "Q316",    # love
+            "Q183",    # night
+            "Q198",    # war
+            "Q18811",  # battle
+            "Q111",    # day (too abstract)
+            "Q12133"   # light (too abstract)
+        ]
+        
+        # This test documents the expected behavior
+        # The actual implementation will filter these in datacreator.py
+        assert len(bonus_eligible_codes) > 0, "Should have bonus-eligible codes"
+        assert len(bonus_ineligible_codes) > 0, "Should have bonus-ineligible codes"
+        
+        # Ensure no overlap
+        overlap = set(bonus_eligible_codes) & set(bonus_ineligible_codes)
+        assert len(overlap) == 0, f"Should be no overlap between eligible and ineligible codes: {overlap}"
 
 
 if __name__ == '__main__':

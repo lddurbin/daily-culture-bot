@@ -108,6 +108,90 @@ class PaintingDataCreator:
             self.vision_analyzer = None
             print("⚠️ Warning: vision_analyzer module not available")
 
+    def _is_eligible_for_depicts_bonus(self, q_codes: List[str]) -> bool:
+        """
+        Check if artwork Q-codes are eligible for depicts bonus.
+        Only concrete, visually verifiable objects should get the bonus.
+        
+        Args:
+            q_codes: List of Wikidata Q-codes associated with the artwork
+            
+        Returns:
+            True if artwork has concrete, visually verifiable Q-codes
+        """
+        if not q_codes:
+            return False
+        
+        # Concrete, visually verifiable Q-codes that should get depicts bonus
+        concrete_whitelist = {
+            "Q5",        # human
+            "Q134307",   # portrait
+            "Q2811",     # birthday
+            "Q11427",    # flower
+            "Q729",      # animal (when contextually appropriate)
+            "Q16875712", # genre painting
+            "Q8441",     # man
+            "Q467",      # woman
+            "Q7569",     # child
+            "Q11446",    # ship/boat
+            "Q3947",     # house
+            "Q41176",    # building
+            "Q16970",    # church
+            "Q23413",    # castle
+            "Q12280",    # bridge
+            "Q34442",    # road/street
+            "Q101095",   # window
+            "Q12323",    # wall
+            "Q12516",    # tower
+            "Q1420",     # car
+            "Q571",      # book
+            "Q10884",    # tree
+            "Q4421",     # forest
+            "Q9430",     # ocean
+            "Q283",      # water
+            "Q23397",    # lake
+            "Q4022",     # river
+            "Q8502",     # mountain
+            "Q526",      # sky
+            "Q12539",    # cloud
+            "Q523",      # star
+            "Q405",      # moon
+            "Q525",      # sun
+            "Q498",      # wind
+            "Q1165",     # rain
+            "Q12133",    # snow
+            "Q221",      # fire
+            "Q2",        # earth
+            "Q22731",    # stone
+        }
+        
+        # Abstract concepts that should NOT get depicts bonus
+        abstract_blacklist = {
+            "Q4",        # death
+            "Q316",      # love
+            "Q183",      # night
+            "Q198",      # war
+            "Q18811",    # battle
+            "Q111",      # day (too abstract)
+            "Q8886",     # loneliness
+            "Q35127",    # solitude
+            "Q23397",    # landscape (too broad)
+            "Q191163",   # landscape (too broad)
+            "Q7860",     # nature (too broad)
+            "Q395",      # building (too broad)
+            "Q1640824",  # floral painting (too broad)
+            "Q2839016",  # religious painting (too broad)
+        }
+        
+        # Check if any Q-codes are in the concrete whitelist
+        has_concrete = any(q_code in concrete_whitelist for q_code in q_codes)
+        
+        # Check if any Q-codes are in the abstract blacklist
+        has_abstract = any(q_code in abstract_blacklist for q_code in q_codes)
+        
+        # Only eligible if has concrete objects and no abstract concepts
+        return has_concrete and not has_abstract
+
     def _get_cache_key(self, query_type: str, **params) -> str:
         """Generate a cache key for query parameters."""
         # Create a deterministic key from parameters
@@ -846,11 +930,13 @@ class PaintingDataCreator:
                     poet_death_year=poet_death_year
                 )
                 
-                # Apply depicts bonus for direct depicts matches
+                # Apply depicts bonus for direct depicts matches (concrete objects only)
                 depicts_bonus = strategy.get("depicts_bonus", 0.0)
                 if depicts_bonus > 0:
-                    score += depicts_bonus
-                    score = min(score, 1.0)  # Cap at 1.0
+                    # Check if artwork has concrete, visually verifiable Q-codes
+                    if self._is_eligible_for_depicts_bonus(artwork_entry.get("subject_q_codes", [])):
+                        score += depicts_bonus
+                        score = min(score, 1.0)  # Cap at 1.0
                 
                 # Only return artwork that meets minimum score
                 if score >= strategy["min_score"]:
@@ -990,11 +1076,13 @@ class PaintingDataCreator:
                     poet_death_year=poet_death_year
                 )
                 
-                # Apply depicts bonus for direct depicts matches
+                # Apply depicts bonus for direct depicts matches (concrete objects only)
                 depicts_bonus = strategy.get("depicts_bonus", 0.0)
                 if depicts_bonus > 0:
-                    score += depicts_bonus
-                    score = min(score, 1.0)  # Cap at 1.0
+                    # Check if artwork has concrete, visually verifiable Q-codes
+                    if self._is_eligible_for_depicts_bonus(artwork_entry.get("subject_q_codes", [])):
+                        score += depicts_bonus
+                        score = min(score, 1.0)  # Cap at 1.0
                 
                 # Only include artwork that meets minimum score
                 if score >= strategy["min_score"]:
@@ -1126,8 +1214,8 @@ class PaintingDataCreator:
             "wikidata": wikidata_url,
             "date": datetime.now().strftime("%Y-%m-%d"),
             "sitelinks": int(fields['sitelinks']),
-            "subject_q_codes": [fields['subject']] if fields['subject'] else [],
-            "genre_q_codes": [fields['genre']] if fields['genre'] else [],
+            "subject_q_codes": [fields['subject'].split('/')[-1]] if fields['subject'] else [],
+            "genre_q_codes": [fields['genre'].split('/')[-1]] if fields['genre'] else [],
             "artwork_type": fields['artwork_type'],
             "vision_analysis": vision_analysis,
             "vision_q_codes": vision_q_codes

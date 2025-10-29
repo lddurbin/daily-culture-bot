@@ -110,30 +110,68 @@ Return ONLY valid JSON with no additional text."""
                 else:
                     raise ValueError("Could not parse JSON from OpenAI response")
             
-            # Map emotions and themes to Q-codes
+            # Map emotions and themes to Q-codes with concrete noun priority
             primary_emotions = ai_result.get("primary_emotions", [])
             secondary_emotions = ai_result.get("secondary_emotions", [])
             themes = ai_result.get("themes", [])
+            concrete_elements = ai_result.get("concrete_elements", {})
             
             q_codes = []
             
-            # Add Q-codes for primary emotions (higher weight)
+            # PRIORITY 1: Concrete nouns from concrete_elements (highest priority)
+            concrete_q_codes = []
+            if concrete_elements:
+                # Import OBJECT_MAPPINGS for concrete noun mapping
+                try:
+                    from . import poem_themes
+                    object_mappings = getattr(poem_themes, 'OBJECT_MAPPINGS', {})
+                except ImportError:
+                    object_mappings = {}
+                
+                # Extract concrete nouns from all categories
+                all_concrete_nouns = []
+                for category in ["natural_objects", "man_made_objects", "living_beings", "abstract_concepts"]:
+                    nouns = concrete_elements.get(category, [])
+                    if isinstance(nouns, list):
+                        all_concrete_nouns.extend(nouns)
+                
+                # Map concrete nouns to Q-codes
+                for noun in all_concrete_nouns:
+                    if isinstance(noun, str) and noun.lower() in object_mappings:
+                        concrete_q_codes.extend(object_mappings[noun.lower()]["q_codes"])
+            
+            # Add concrete Q-codes first (highest priority)
+            q_codes.extend(concrete_q_codes)
+            
+            # PRIORITY 2: Primary emotions (high priority)
             for emotion in primary_emotions:
                 if emotion.lower() in self.emotion_mappings:
                     q_codes.extend(self.emotion_mappings[emotion.lower()]["q_codes"])
             
-            # Add Q-codes for secondary emotions (lower weight)
+            # PRIORITY 3: Secondary emotions (medium priority)
             for emotion in secondary_emotions:
                 if emotion.lower() in self.emotion_mappings:
                     q_codes.extend(self.emotion_mappings[emotion.lower()]["q_codes"])
             
-            # Add Q-codes for themes
+            # PRIORITY 4: Themes (lowest priority)
             for theme in themes:
                 if theme.lower() in self.theme_mappings:
                     q_codes.extend(self.theme_mappings[theme.lower()]["q_codes"])
             
-            # Remove duplicates
-            q_codes = list(set(q_codes))
+            # Remove duplicates while preserving order (concrete first)
+            seen = set()
+            unique_q_codes = []
+            for q_code in q_codes:
+                if q_code not in seen:
+                    seen.add(q_code)
+                    unique_q_codes.append(q_code)
+            
+            # Limit to 8 Q-codes maximum, favoring concrete over abstract
+            if len(unique_q_codes) > 8:
+                # Keep first 8 (which includes concrete nouns first)
+                unique_q_codes = unique_q_codes[:8]
+            
+            q_codes = unique_q_codes
             
             return {
                 "primary_emotions": primary_emotions,
