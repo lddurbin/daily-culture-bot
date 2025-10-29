@@ -178,6 +178,63 @@ class PoemAnalyzer:
             return self.openai_analyzer.analyze_poem_with_ai(poem)
         else:
             raise ValueError("OpenAI analyzer not available")
+
+    @staticmethod
+    def _normalize_term(term: str) -> str:
+        """Lightweight lemmatization for simple plural/variant handling."""
+        if not isinstance(term, str):
+            return term
+        t = term.strip().lower()
+        if t.endswith("ves") and len(t) > 3:
+            # knives -> knife, loaves -> loaf (prefer 'f')
+            base = t[:-3]
+            return base + ("f")
+        if t.endswith("ies") and len(t) > 3:
+            return t[:-3] + "y"
+        if t.endswith("es") and len(t) > 2:
+            return t[:-2]
+        if t.endswith("s") and len(t) > 1:
+            return t[:-1]
+        return t
+
+    def derive_additional_q_codes(self, analysis: Dict) -> List[str]:
+        """Derive extra Q-codes from concrete elements and subject suggestions using
+        OBJECT_MAPPINGS first, with lightweight normalization.
+        """
+        try:
+            try:
+                from . import poem_themes as _pt
+            except ImportError:
+                import poem_themes as _pt
+            object_map = getattr(_pt, "OBJECT_MAPPINGS", {})
+        except Exception:
+            object_map = {}
+
+        extra: List[str] = []
+        concrete = analysis.get("concrete_elements", {}) or {}
+        suggestions = analysis.get("subject_suggestions", []) or []
+
+        def add_from_term(term: str):
+            key = self._normalize_term(term)
+            if key in object_map:
+                extra.extend(object_map[key]["q_codes"])
+
+        for cat in ("natural_objects", "man_made_objects", "living_beings", "abstract_concepts"):
+            for term in concrete.get(cat, []) or []:
+                if isinstance(term, str):
+                    add_from_term(term)
+        for term in suggestions:
+            if isinstance(term, str):
+                add_from_term(term)
+
+        # de-dupe
+        seen = set()
+        ordered = []
+        for q in extra:
+            if q not in seen:
+                seen.add(q)
+                ordered.append(q)
+        return ordered
     
     def _analyze_with_keywords(self, poem: Dict) -> Dict:
         """
