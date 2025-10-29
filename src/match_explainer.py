@@ -281,18 +281,27 @@ class MatchExplainer:
             "emotional_resonance": ""
         }
         
-        # Shared objects
+        # Shared objects - prioritize vision analysis data
         poem_objects = poem_analysis.get("concrete_elements", {})
         poem_natural = poem_objects.get("natural_objects", [])
         poem_man_made = poem_objects.get("man_made_objects", [])
         poem_living = poem_objects.get("living_beings", [])
+        poem_abstract = poem_objects.get("abstract_concepts", [])
         
-        all_poem_objects = self._flatten_emotions(poem_natural) + self._flatten_emotions(poem_man_made) + self._flatten_emotions(poem_living)
+        all_poem_objects = (self._flatten_emotions(poem_natural) + 
+                           self._flatten_emotions(poem_man_made) + 
+                           self._flatten_emotions(poem_living) +
+                           self._flatten_emotions(poem_abstract))
         
         if vision_analysis and vision_analysis.get("success"):
             vision_objects = vision_analysis.get("analysis", {}).get("detected_objects", [])
-            shared_objects = set(all_poem_objects) & set(vision_objects)
-            concrete_matches["shared_objects"] = list(shared_objects)
+            if vision_objects:
+                shared_objects = set(all_poem_objects) & set(vision_objects)
+                concrete_matches["shared_objects"] = list(shared_objects)
+                
+                # If no shared objects, use vision objects as they're more specific
+                if not shared_objects and vision_objects:
+                    concrete_matches["shared_objects"] = vision_objects[:3]  # Top 3 vision objects
         
         # Setting alignment
         poem_setting = poem_analysis.get("narrative_elements", {}).get("setting", "")
@@ -353,7 +362,7 @@ class MatchExplainer:
     
     def _generate_summary(self, score: float, connections: List[str], 
                          concrete_matches: Dict) -> str:
-        """Generate overall summary of the match."""
+        """Generate overall summary of the match using specific data."""
         if score >= 0.8:
             strength = "excellent"
         elif score >= 0.6:
@@ -363,15 +372,22 @@ class MatchExplainer:
         else:
             strength = "weak"
         
-        if connections:
+        # Prioritize specific data over generic templates
+        if concrete_matches.get("shared_objects"):
+            objects = concrete_matches["shared_objects"]
+            return f"This is a {strength} match featuring shared elements: {', '.join(objects[:2])}"
+        elif concrete_matches.get("setting_alignment"):
+            return f"This is a {strength} match because {concrete_matches['setting_alignment'].lower()}"
+        elif concrete_matches.get("temporal_alignment"):
+            return f"This is a {strength} match because {concrete_matches['temporal_alignment'].lower()}"
+        elif concrete_matches.get("emotional_resonance"):
+            return f"This is a {strength} match because {concrete_matches['emotional_resonance'].lower()}"
+        elif connections:
             primary_connection = connections[0]
             # Handle case where primary_connection might be a list
             if isinstance(primary_connection, list):
                 primary_connection = primary_connection[0] if primary_connection else "thematic alignment"
             return f"This is a {strength} match because {primary_connection.lower()}"
-        elif concrete_matches.get("shared_objects"):
-            objects = concrete_matches["shared_objects"]
-            return f"This is a {strength} match featuring shared elements: {', '.join(objects[:2])}"
         else:
             return f"This is a {strength} match based on thematic and emotional alignment"
 

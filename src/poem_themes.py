@@ -336,7 +336,22 @@ OBJECT_MAPPINGS = {
     "grave": {"q_codes": ["Q3961"], "keywords": ["grave", "graves", "tomb", "tombs", "burial"]},
     "graves": {"q_codes": ["Q3961"], "keywords": ["grave", "graves", "tomb", "tombs", "burial"]},
     "tomb": {"q_codes": ["Q3961"], "keywords": ["grave", "graves", "tomb", "tombs", "burial"]},
-    "tombs": {"q_codes": ["Q3961"], "keywords": ["grave", "graves", "tomb", "tombs", "burial"]}
+    "tombs": {"q_codes": ["Q3961"], "keywords": ["grave", "graves", "tomb", "tombs", "burial"]},
+    
+    # Birthday and celebration concrete nouns
+    "friend": {"q_codes": ["Q5", "Q17297777"], "keywords": ["friend", "friends", "companion", "companions", "buddy", "buddies"]},
+    "friends": {"q_codes": ["Q5", "Q17297777"], "keywords": ["friend", "friends", "companion", "companions", "buddy", "buddies"]},
+    "wish": {"q_codes": ["Q2385804", "Q8274"], "keywords": ["wish", "wishes", "hope", "hopes", "desire", "desires"]},
+    "wishes": {"q_codes": ["Q2385804", "Q8274"], "keywords": ["wish", "wishes", "hope", "hopes", "desire", "desires"]},
+    "pleasure": {"q_codes": ["Q2385804", "Q8274", "Q1068639"], "keywords": ["pleasure", "joy", "happiness", "delight", "enjoyment"]},
+    "birthday": {"q_codes": ["Q2811", "Q2385804"], "keywords": ["birthday", "birthdays", "anniversary", "celebration", "party"]},
+    "birthdays": {"q_codes": ["Q2811", "Q2385804"], "keywords": ["birthday", "birthdays", "anniversary", "celebration", "party"]},
+    "celebration": {"q_codes": ["Q2385804", "Q8274"], "keywords": ["celebration", "celebrations", "festivity", "festivities", "party", "parties"]},
+    "celebrations": {"q_codes": ["Q2385804", "Q8274"], "keywords": ["celebration", "celebrations", "festivity", "festivities", "party", "parties"]},
+    "joy": {"q_codes": ["Q8274", "Q1068639"], "keywords": ["joy", "happiness", "pleasure", "delight", "cheer", "merriment"]},
+    "happiness": {"q_codes": ["Q8274", "Q1068639"], "keywords": ["joy", "happiness", "pleasure", "delight", "cheer", "merriment"]},
+    "health": {"q_codes": ["Q5", "Q2385804"], "keywords": ["health", "wellness", "vitality", "strength", "vigor"]},
+    "youth": {"q_codes": ["Q7569", "Q2385804"], "keywords": ["youth", "young", "younger", "fresh", "vital"]}
 }
 
 # Conflict mappings for enhanced matching
