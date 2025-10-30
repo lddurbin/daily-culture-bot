@@ -28,6 +28,16 @@ except ImportError:
     # dotenv not available, continue without it
     pass
 
+# Structured logging setup
+try:
+    from . import logging_config, context as run_context
+except ImportError:
+    import logging_config  # type: ignore
+    import context as run_context  # type: ignore
+
+logging_config.configure_logging()
+_base_logger = logging_config.get_logger(__name__)
+
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Daily Culture Bot - Fetch and display artwork and poem information')
@@ -99,9 +109,13 @@ def download_image(painting, headers, save_dir="."):
 
 def main():
     args = parse_arguments()
+    # Seed correlation id for this run
+    cid = run_context.new_correlation_id()
+    logger = _base_logger.bind(correlation_id=cid)
     
     # Validate complementary mode constraints
     if args.complementary and args.poems_only:
+        logger.error("invalid_cli_flags", complementary=args.complementary, poems_only=args.poems_only)
         print("❌ Error: --complementary and --poems-only cannot be used together")
         print("💡 Use --complementary to match artwork to poems, or --poems-only for poems only")
         return
@@ -109,6 +123,7 @@ def main():
     # Auto-enable poems when using complementary mode
     if args.complementary and not args.poems:
         args.poems = True
+        logger.info("complementary_auto_enable_poems")
         print("📝 Complementary mode automatically enabled poem fetching")
     
     # Initialize the data creators
@@ -124,8 +139,10 @@ def main():
         except ImportError:
             import match_explainer
         match_explainer = match_explainer.MatchExplainer()
+        logger.info("match_explainer_initialized")
         print("✅ Match explainer initialized")
     except ImportError:
+        logger.warning("match_explainer_missing")
         print("⚠️ Match explainer not available")
     
     paintings = []
@@ -135,14 +152,17 @@ def main():
     
     # Handle complementary mode (poems first, then match artwork)
     if args.complementary:
+        logger.info("mode_complementary_start")
         print(f"🎭 Complementary mode: Fetching poems first, then matching artwork...")
         
         # Fetch poems first
         if args.email:
             # For email mode, use retry mechanism to ensure we get poems under 300 words
+            logger.info("fetch_poems_for_email", poem_count=args.poem_count)
             print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''} for email (≤300 words each)...")
             
             if args.fast:
+                logger.info("fast_mode_poems")
                 print("⚡ Fast mode: Using sample poem data...")
                 poems = poem_fetcher_instance.create_sample_poems(args.poem_count)
                 # Apply word count filtering to sample poems
@@ -151,22 +171,27 @@ def main():
                 poems = poem_fetcher_instance.fetch_poems_with_word_limit(args.poem_count, max_words=300)
         else:
             # Regular complementary mode - fetch poems normally
+            logger.info("fetch_poems", poem_count=args.poem_count)
             print(f"📝 Fetching {args.poem_count} poem{'s' if args.poem_count != 1 else ''}...")
             
             if args.fast:
+                logger.info("fast_mode_poems")
                 print("⚡ Fast mode: Using sample poem data...")
                 poems = poem_fetcher_instance.create_sample_poems(args.poem_count)
             else:
                 poems = poem_fetcher_instance.fetch_random_poems(args.poem_count)
         
         if not poems:
+            logger.error("poetrydb_fetch_failed")
             print("❌ Could not fetch poems from PoetryDB.")
             print("💡 Try again later or check your internet connection.")
             raise ValueError("Failed to fetch poems from PoetryDB API")
         
+        logger.info("poems_selected", count=len(poems))
         print(f"✅ Selected {len(poems)} poem{'s' if len(poems) != 1 else ''}")
         
         # Analyze poems and fetch matching artwork
+        logger.info("analyze_poems_start")
         print("🔍 Analyzing poem themes and emotions...")
         poem_analyses = poem_analyzer_instance.analyze_multiple_poems(poems)
         
@@ -241,11 +266,13 @@ def main():
                 print(f"   Avoid subjects: {analysis['avoid_subjects']}")
         
         if all_q_codes:
+            logger.info("search_artworks", q_codes=all_q_codes, genres=emotion_genres)
             print(f"\n🎨 Searching for artwork matching themes and emotions: {all_q_codes}")
             if emotion_genres:
                 print(f"   With genre filtering: {emotion_genres}")
             
             if args.fast:
+                logger.info("fast_mode_artworks")
                 print("⚡ Fast mode: Using sample artwork data...")
                 paintings = creator.create_sample_paintings(args.count)
                 match_status = ["sample"] * len(paintings)
@@ -259,12 +286,14 @@ def main():
                 
                 # Multi-pass analysis: First pass - fetch candidates, Second pass - AI selection
                 if not args.no_multi_pass:
+                    logger.info("multipass_first_pass_start", candidate_count=candidate_count)
                     print("🔄 Multi-pass analysis: Fetching candidate artworks...")
                     
                     # First pass: Fetch more candidates than needed for better selection
                     candidate_count = max(args.count * 3, args.candidate_count)  # Use CLI flag or default
                     print(f"📋 First pass: Fetching {candidate_count} candidate artworks...")
                 else:
+                    logger.info("single_pass_start", count=candidate_count)
                     print("⚡ Single-pass analysis: Fetching artwork directly...")
                     candidate_count = args.count
                 

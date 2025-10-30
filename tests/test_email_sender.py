@@ -199,7 +199,7 @@ class TestEmailSender:
         
         assert '🎭 Themes: nature, love' in html
         assert 'poem-themes' in html
-        
+    
     def test_build_html_email_includes_poem_theme_emotions(self):
         """HTML should include emotion badges when primary_emotions available."""
         poems = [{

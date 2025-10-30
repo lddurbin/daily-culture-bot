@@ -1,6 +1,6 @@
 name: Daily Culture Email (Optimized)
 
-on:
+"on":
   schedule:
     # Run daily at 6:00 AM New Zealand time (NZDT = UTC+13, so 5pm UTC previous day)
     - cron: '0 17 * * *'

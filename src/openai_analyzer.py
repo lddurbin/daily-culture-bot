@@ -11,6 +11,13 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 
+try:
+    from . import cost_guard, logging_config
+except ImportError:
+    import cost_guard  # type: ignore
+    import logging_config  # type: ignore
+
+
 class OpenAIAnalyzer:
     """Handles OpenAI API integration for poem analysis."""
     
@@ -86,7 +93,13 @@ Poem:
 
 Return ONLY valid JSON with no additional text."""
         
+        cg = cost_guard.CostGuard()
         try:
+            # Conservative pre-check (estimate 1k tokens)
+            try:
+                cg.check_budget(cost_guard.CostGuard._estimate_cost(1000, "gpt-4o"))
+            except Exception:
+                pass
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
@@ -97,6 +110,14 @@ Return ONLY valid JSON with no additional text."""
                 temperature=0.3
             )
             
+            # Track cost if usage is available (OpenAI Python SDK v2 exposes usage)
+            try:
+                usage = getattr(response, "usage", None)
+                if usage and getattr(usage, "total_tokens", None) is not None:
+                    cg.track_cost(int(usage.total_tokens), "gpt-4o")
+            except Exception:
+                pass
+
             content = response.choices[0].message.content.strip()
             
             # Parse JSON response
@@ -269,7 +290,12 @@ Select artworks that best match the poem's:
 
 Return ONLY valid JSON with no additional text."""
         
+        cg = cost_guard.CostGuard()
         try:
+            try:
+                cg.check_budget(cost_guard.CostGuard._estimate_cost(1200, "gpt-4o"))
+            except Exception:
+                pass
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
@@ -280,6 +306,13 @@ Return ONLY valid JSON with no additional text."""
                 temperature=0.3
             )
             
+            try:
+                usage = getattr(response, "usage", None)
+                if usage and getattr(usage, "total_tokens", None) is not None:
+                    cg.track_cost(int(usage.total_tokens), "gpt-4o")
+            except Exception:
+                pass
+
             content = response.choices[0].message.content.strip()
             
             # Parse JSON response
