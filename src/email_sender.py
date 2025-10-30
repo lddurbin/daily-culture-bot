@@ -66,7 +66,8 @@ class EmailSender:
     
     def build_html_email(self, paintings: List[Dict], poems: List[Dict], 
                         match_status: Optional[List[str]] = None,
-                        poem_analyses: Optional[List[Dict]] = None) -> str:
+                        poem_analyses: Optional[List[Dict]] = None,
+                        match_explanations: Optional[List[Dict]] = None) -> str:
         """Build HTML email content."""
         today = date.today().strftime('%B %d, %Y')
         
@@ -228,6 +229,31 @@ class EmailSender:
             font-size: 14px;
             color: #0369a1;
         }}
+        .poem-emotions {{
+            background: #fef3c7;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+            color: #92400e;
+        }}
+        .match-explanation {{
+            background: #f1f5f9;
+            padding: 14px;
+            border-radius: 8px;
+            border-left: 4px solid #0ea5e9;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #334155;
+        }}
+        .match-explanation .title {{
+            font-weight: bold;
+            margin-bottom: 6px;
+        }}
+        .match-explanation .meta {{
+            color: #475569;
+            margin-bottom: 6px;
+        }}
         .footer {{
             text-align: center;
             margin-top: 40px;
@@ -273,10 +299,29 @@ class EmailSender:
                     elif status == "sample":
                         status_badge = '<span class="match-badge sample">⚡ Sample</span>'
                 
+                # Build match explanation HTML if available
+                match_html = ""
+                if match_explanations and i < len(match_explanations):
+                    exp = match_explanations[i] or {}
+                    score_text = exp.get('match_score', '')
+                    assess_text = exp.get('overall_assessment', '')
+                    why_text = exp.get('why_matched', '')
+                    match_html = (
+                        "\n            <div class=\"match-explanation\">\n"
+                        "                <div class=\"title\">Why this matches</div>\n"
+                        f"                <div class=\"meta\">Score: {score_text} • {assess_text}</div>\n"
+                        f"                <div class=\"body\">{why_text}</div>\n"
+                        "            </div>\n"
+                    )
+
                 html_content += f"""
         <div class="artwork-item">
             <h3 class="artwork-title">{painting['title']} {status_badge}</h3>
             <p class="artwork-artist">by {painting['artist']} ({painting['year'] or 'Unknown year'})</p>
+            <div class="artwork-image">
+                <img src="cid:artwork_{i}" alt="{painting['title']}" />
+            </div>
+            {f'<p class="detail-value">{painting.get("description")}</p>' if painting.get('description') else ''}
             
             <div class="artwork-details">
                 <div class="detail-item">
@@ -301,6 +346,7 @@ class EmailSender:
                 <a href="{painting['image']}" target="_blank">View Original</a>
                 <a href="{painting['wikidata']}" target="_blank">Wikidata</a>
             </div>
+            {match_html}
         </div>
 """
             
@@ -322,6 +368,13 @@ class EmailSender:
                         themes = analysis.get("themes", [])
                         if themes:
                             theme_info = f'<div class="poem-themes">🎭 Themes: {", ".join(themes)}</div>'
+                    # Emotions (primary) as badges
+                    emotions_info = ""
+                    primary_emotions = analysis.get("primary_emotions", []) or analysis.get("emotions", [])
+                    if primary_emotions:
+                        emotions_info = f'<div class="poem-emotions">💗 Emotions: {", ".join(primary_emotions)}</div>'
+                    if emotions_info:
+                        theme_info = theme_info + emotions_info
                 
                 html_content += f"""
         <div class="poem-item">
@@ -428,7 +481,8 @@ class EmailSender:
                               email_format: str = "both",
                               match_status: Optional[List[str]] = None,
                               poem_analyses: Optional[List[Dict]] = None,
-                              image_paths: Optional[List[str]] = None) -> MIMEMultipart:
+                              image_paths: Optional[List[str]] = None,
+                              match_explanations: Optional[List[Dict]] = None) -> MIMEMultipart:
         """Create multipart email with HTML and/or text content."""
         if not self._validate_email(to_email):
             raise ValueError(f"Invalid email address: {to_email}")
@@ -446,7 +500,7 @@ class EmailSender:
             msg.attach(text_part)
         
         if email_format in ["html", "both"]:
-            html_content = self.build_html_email(paintings, poems, match_status, poem_analyses)
+            html_content = self.build_html_email(paintings, poems, match_status, poem_analyses, match_explanations)
             html_part = MIMEText(html_content, 'html', 'utf-8')
             msg.attach(html_part)
         
@@ -490,7 +544,8 @@ class EmailSender:
     def send_email(self, to_email: str, paintings: List[Dict], poems: List[Dict],
                   email_format: str = "both", match_status: Optional[List[str]] = None,
                   poem_analyses: Optional[List[Dict]] = None, 
-                  image_paths: Optional[List[str]] = None) -> bool:
+                  image_paths: Optional[List[str]] = None,
+                  match_explanations: Optional[List[Dict]] = None) -> bool:
         """
         Send email with artwork and poem content.
         
@@ -518,7 +573,7 @@ class EmailSender:
             # Create email message
             msg = self.create_multipart_email(
                 to_email, subject, paintings, poems, email_format,
-                match_status, poem_analyses, image_paths
+                match_status, poem_analyses, image_paths, match_explanations
             )
             
             # Send email

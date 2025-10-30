@@ -199,6 +199,67 @@ class TestEmailSender:
         
         assert '🎭 Themes: nature, love' in html
         assert 'poem-themes' in html
+        
+    def test_build_html_email_includes_poem_theme_emotions(self):
+        """HTML should include emotion badges when primary_emotions available."""
+        poems = [{
+            'title': 'Emotion Poem',
+            'author': 'Poet E',
+            'text': 'text',
+            'line_count': 1,
+            'source': 'Source'
+        }]
+        poem_analyses = [{
+            'has_themes': True,
+            'themes': ['nature'],
+            'primary_emotions': ['joy', 'peace']
+        }]
+
+        html = self.email_sender.build_html_email([], poems, None, poem_analyses)
+        assert '🎭 Themes: nature' in html
+        assert '💗 Emotions: joy, peace' in html
+
+    def test_build_html_email_includes_match_explanations(self):
+        """HTML should include a match explanation panel when provided."""
+        paintings = [{
+            'title': 'Match Test Painting',
+            'artist': 'Artist A',
+            'year': '1900',
+            'style': 'Style A',
+            'medium': 'Medium A',
+            'museum': 'Museum A',
+            'origin': 'Origin A',
+            'image': 'http://example.com/image.jpg',
+            'wikidata': 'http://wikidata.org/Q111'
+        }]
+        poems = [{
+            'title': 'Test Poem',
+            'author': 'Test Poet',
+            'text': 'Some poem text',
+            'line_count': 1,
+            'source': 'Test Source'
+        }]
+        match_explanations = [{
+            'match_score': 0.82,
+            'overall_assessment': 'excellent',
+            'why_matched': 'Strong thematic and emotional alignment.',
+            'specific_connections': ['trees', 'calm mood'],
+            'concrete_matches': {'shared_objects': ['tree']},
+            'potential_tensions': []
+        }]
+
+        # Call with keyword to preserve existing signature order
+        html = self.email_sender.build_html_email(
+            paintings,
+            poems,
+            match_status=None,
+            poem_analyses=None,
+            match_explanations=match_explanations
+        )
+
+        assert 'Why this matches' in html
+        assert 'Strong thematic and emotional alignment.' in html
+        assert 'excellent' in html
     
     def test_build_plain_text_email_with_paintings(self):
         """Test plain text email generation with paintings."""
@@ -428,6 +489,42 @@ class TestEmailSender:
             # Clean up temporary files
             os.unlink(image_path1)
             os.unlink(image_path2)
+
+    def test_build_html_email_inlines_images_with_cid(self):
+        """HTML should reference CID attachments via img src=cid:artwork_i."""
+        paintings = [{
+            'title': 'CID Painting',
+            'artist': 'CID Artist',
+            'year': '2020',
+            'style': 'Modern',
+            'medium': 'Oil',
+            'museum': 'Museum',
+            'origin': 'Country',
+            'image': 'http://example.com/image.jpg',
+            'wikidata': 'http://wikidata.org/Q222'
+        }]
+
+        html = self.email_sender.build_html_email(paintings, [])
+        assert 'cid:artwork_0' in html
+
+    def test_build_html_email_includes_artwork_description_and_year(self):
+        """HTML should include artwork description and creation year when present."""
+        paintings = [{
+            'title': 'Descriptive Painting',
+            'artist': 'Desc Artist',
+            'year': 1888,
+            'style': 'Post-Impressionism',
+            'medium': 'Oil on canvas',
+            'museum': 'Some Museum',
+            'origin': 'Somewhere',
+            'image': 'http://example.com/image.jpg',
+            'wikidata': 'http://wikidata.org/Q333',
+            'description': 'A vivid depiction of a night sky.'
+        }]
+
+        html = self.email_sender.build_html_email(paintings, [])
+        assert 'A vivid depiction of a night sky.' in html
+        assert 'Desc Artist (1888)' in html
     
     @patch('email_sender.smtplib.SMTP')
     def test_send_email_success_tls(self, mock_smtp_class):
