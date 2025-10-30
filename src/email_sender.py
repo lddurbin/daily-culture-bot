@@ -299,6 +299,21 @@ class EmailSender:
                     elif status == "sample":
                         status_badge = '<span class="match-badge sample">⚡ Sample</span>'
                 
+                # Build match explanation HTML if available
+                match_html = ""
+                if match_explanations and i < len(match_explanations):
+                    exp = match_explanations[i] or {}
+                    score_text = exp.get('match_score', '')
+                    assess_text = exp.get('overall_assessment', '')
+                    why_text = exp.get('why_matched', '')
+                    match_html = (
+                        "\n            <div class=\"match-explanation\">\n"
+                        "                <div class=\"title\">Why this matches</div>\n"
+                        f"                <div class=\"meta\">Score: {score_text} • {assess_text}</div>\n"
+                        f"                <div class=\"body\">{why_text}</div>\n"
+                        "            </div>\n"
+                    )
+
                 html_content += f"""
         <div class="artwork-item">
             <h3 class="artwork-title">{painting['title']} {status_badge}</h3>
@@ -331,15 +346,7 @@ class EmailSender:
                 <a href="{painting['image']}" target="_blank">View Original</a>
                 <a href="{painting['wikidata']}" target="_blank">Wikidata</a>
             </div>
-            {(
-                (lambda exp: f"""
-            <div class=\"match-explanation\">
-                <div class=\"title\">Why this matches</div>
-                <div class=\"meta\">Score: {exp.get('match_score', '')} • {exp.get('overall_assessment', '')}</div>
-                <div class=\"body\">{exp.get('why_matched', '')}</div>
-            </div>
-            """) (match_explanations[i])
-            ) if (match_explanations and i < len(match_explanations)) else ''}
+            {match_html}
         </div>
 """
             
